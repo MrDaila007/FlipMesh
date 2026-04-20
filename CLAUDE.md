@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build
 
-Requires [uFBT](https://github.com/flipperdevices/ufbt) and a connected Flipper Zero:
+Requires [uFBT](https://github.com/flipperdevices/ufbt):
 
 ```bash
-ufbt build        # compile to build/flipmesh.fap
-ufbt launch       # build + deploy to device
+cd apps/uart && ufbt build    # flipmesh_uart.fap
+cd apps/bt  && ufbt build     # flipmesh_bt.fap
 ```
 
-No automated test suite — verification is manual on hardware with a live Meshtastic node.
+No automated test suite — verification is manual on hardware with a live Meshtastic node (UART app).
 
 ## Architecture
 
@@ -20,7 +20,7 @@ No automated test suite — verification is manual on hardware with a live Mesht
 Two threads share all state via `app->lock` (FuriMutex):
 
 - **Main thread** — UI render (`render_cb`), input (`input_cb`), keyboard overlay, settings save/load, `fm_proto_sync()`
-- **RX thread** (`fm_rx_thread` in `fm_protocol.c`) — reads `rx_stream`, byte-feeds `framing_feed()`, nanopb-decodes `FromRadio`, updates roster/history, calls `fm_notify_message()`
+- **RX thread** (`fm_rx_thread` in `core/fm_protocol.c`, **UART app only**) — reads `rx_stream`, byte-feeds `framing_feed()`, calls `fm_proto_deliver_fromradio()`, updates roster/history, calls `fm_notify_message()`
 
 `render_cb` acquires the lock, snapshots what it needs, and releases immediately — it never blocks.
 
@@ -40,7 +40,7 @@ Five consecutive bad-magic bytes trigger auto-resync ("Resyncing..." log entry).
 - `FMHistory` — ring buffer where `head` = index of **oldest** message; iteration: `buf[(head + i) % FM_MSG_HISTORY]`
 - `FMRoster` — up to 32 `FMNode` entries; updated from both bulk `node_info` (sync) and live packets
 
-### Wire Protocol
+### Wire protocol (UART)
 
 ```
 [0x94][0xC3][len_hi][len_lo][nanopb payload]
@@ -48,10 +48,11 @@ Five consecutive bad-magic bytes trigger auto-resync ("Resyncing..." log entry).
 
 Max frame: 512 bytes. UART ISR pushes bytes into `rx_stream` (4096 B); RX thread reads and feeds `framing_feed()` byte by byte.
 
-### Private Libraries
+TX uses `fm_transport_tx()` (`apps/uart/fm_transport_uart.c` adds framing and writes serial).
 
-- `lib/nanopb/` — nanopb 0.4.9.1, compiled via `Lib(sources=["*.c"], name="nanopb")`
-- `lib/meshtastic_api/meshtastic/` — nanopb-generated files from Meshtastic firmware 2.7.22; `.pb.c` files compiled via `Lib(sources=["meshtastic/*.pb.c"], name="meshtastic_api")`
+### Private libraries
+
+Under each `apps/*/lib/` uFBT expects `lib/<name>/` — this repo uses symlinks into `core/lib/` for **nanopb** and **meshtastic_api**, and per-file symlinks into `core/` for **flipmesh_core** sources.
 
 ## Coding Conventions
 

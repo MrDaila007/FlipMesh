@@ -3,7 +3,7 @@
 ## Before you start
 
 - This project targets **Flipper Zero** hardware and the **Meshtastic** protocol — test on real hardware when possible
-- All code must compile cleanly with `ufbt build` before opening a PR
+- All code must compile cleanly with `ufbt build` in `apps/uart` and `apps/bt` when `core/` changes
 - Keep the embedded constraints in mind: 10 KB stack, 128×64 display, no dynamic allocation in hot paths
 
 ## Setting up the development environment
@@ -20,11 +20,12 @@
    cd FlipMesh
    ```
 
-3. Build:
+3. Build (from the app you are changing):
    ```bash
-   ufbt build        # build only
-   ufbt launch       # build + deploy to connected Flipper Zero
+   cd apps/uart && ufbt build && cd ../..
+   cd apps/bt  && ufbt build && cd ../..
    ```
+   Open a PR only after **both** targets compile if you changed `core/`.
 
 ## Hardware for testing
 
@@ -72,10 +73,13 @@ docs: add protocol framing diagram
    ```bash
    git checkout -b feat/your-feature
    ```
-2. Make your changes and verify `ufbt build` passes
+2. Make your changes and verify `ufbt build` in each affected `apps/*` directory
 3. Run the SPDX header check locally:
    ```bash
-   for f in *.c *.h; do grep -q "SPDX" "$f" || echo "Missing: $f"; done
+   for f in core/*.c core/*.h apps/uart/*.c apps/uart/*.h apps/bt/*.c apps/bt/*.h; do
+     [ -f "$f" ] || continue
+     grep -q "SPDX-License-Identifier" "$f" || echo "Missing: $f"
+   done
    ```
 4. Open a PR against `main` with a clear description of what changed and why
 5. CI must pass before merging (build + lint checks)

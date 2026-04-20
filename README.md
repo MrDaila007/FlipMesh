@@ -1,6 +1,13 @@
 # FlipMesh
 
-A Meshtastic mesh network client for Flipper Zero. Connects to a Meshtastic node via UART and provides a full 7-page UI on the 128×64 display.
+A Meshtastic mesh network client for Flipper Zero with a shared **core** and two **applications**:
+
+| App | Directory | Transport | Notes |
+|-----|-----------|-----------|--------|
+| **FlipMesh UART** | [`apps/uart/`](apps/uart/) | Serial (GPIO USART/LPUART) | Full Meshtastic serial framing; same settings path as legacy (`/ext/flipmesh/settings.cfg`). |
+| **FlipMesh BLE** | [`apps/bt/`](apps/bt/) | Bluetooth LE (planned) | Settings under `/ext/flipmesh-bt/`. On stock firmware, BLE **central** / GATT client is not available — see [`docs/ble-feasibility-report.md`](docs/ble-feasibility-report.md). |
+
+Shared logic (protocol decode, UI, roster, history, …) lives in [`core/`](core/).
 
 ## Features
 
@@ -32,11 +39,12 @@ On the Meshtastic node: enable **Serial Module** in **PROTO** mode at **115200 b
 Requires [uFBT](https://github.com/flipperdevices/ufbt).
 
 ```bash
-ufbt build          # build only — produces .fap in .ufbt/build/
-ufbt launch         # build and deploy to connected Flipper Zero
+cd apps/uart && ufbt build    # UART FAP → .ufbt/build/flipmesh_uart.fap
+cd apps/bt  && ufbt build     # BLE FAP  → .ufbt/build/flipmesh_bt.fap
+ufbt launch                   # run from the app directory you want to deploy
 ```
 
-CI runs automatically on every push and pull request via GitHub Actions. The built `.fap` is uploaded as an artifact on each successful build.
+CI runs on every push and PR: both FAPs are built and uploaded as separate artifacts.
 
 ## Documentation
 

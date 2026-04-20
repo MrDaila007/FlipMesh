@@ -5,7 +5,7 @@
 #include "fm_history.h"
 #include "fm_notify.h"
 #include "fm_roster.h"
-#include "fm_uart.h"
+#include "fm_transport.h"
 
 #define TAG "flipmesh"
 
@@ -63,21 +63,8 @@ static bool framing_feed(FlipMeshApp* app, uint8_t b) {
 
 /* ── TX helpers ───────────────────────────────────────────────────────────── */
 
-static void send_frame(FlipMeshApp* app, const uint8_t* payload, size_t len) {
-    if(!app || !app->serial) return;
-    uint8_t hdr[4] = {
-        FM_MAGIC0,
-        FM_MAGIC1,
-        (uint8_t)((len >> 8) & 0xFF),
-        (uint8_t)(len & 0xFF),
-    };
-    furi_hal_serial_tx(app->serial, hdr, sizeof(hdr));
-    furi_hal_serial_tx(app->serial, payload, len);
-    app->tx_ok++;
-}
-
 void fm_proto_heartbeat(FlipMeshApp* app) {
-    if(!app || !app->serial) return;
+    if(!app || !fm_transport_ready(app)) return;
     meshtastic_ToRadio to    = meshtastic_ToRadio_init_default;
     to.which_payload_variant = meshtastic_ToRadio_heartbeat_tag;
     to.heartbeat.nonce = ++app->hb_nonce;
@@ -85,13 +72,16 @@ void fm_proto_heartbeat(FlipMeshApp* app) {
     uint8_t buf[32];
     pb_ostream_t os = pb_ostream_from_buffer(buf, sizeof(buf));
     if(pb_encode(&os, meshtastic_ToRadio_fields, &to)) {
-        send_frame(app, buf, os.bytes_written);
+        if(!fm_transport_tx(app, buf, os.bytes_written)) {
+            app->tx_err++;
+            return;
+        }
         fm_log(app, "Heartbeat sent (%lu)", (unsigned long)app->hb_nonce);
     }
 }
 
 void fm_proto_sync(FlipMeshApp* app) {
-    if(!app || !app->serial) return;
+    if(!app || !fm_transport_ready(app)) return;
     app->conn    = FM_CONN_SYNC;
     app->sync_id = (uint32_t)furi_hal_random_get();
     if(app->sync_id == 0) app->sync_id = 1;
@@ -103,14 +93,18 @@ void fm_proto_sync(FlipMeshApp* app) {
     uint8_t buf[32];
     pb_ostream_t os = pb_ostream_from_buffer(buf, sizeof(buf));
     if(pb_encode(&os, meshtastic_ToRadio_fields, &to)) {
-        send_frame(app, buf, os.bytes_written);
+        if(!fm_transport_tx(app, buf, os.bytes_written)) {
+            app->tx_err++;
+            fm_log(app, "Sync TX failed");
+            return;
+        }
         fm_log(app, "Config sync started (id=%lu)", (unsigned long)app->sync_id);
         fm_status(app, "Syncing...");
     }
 }
 
 void fm_proto_send_text(FlipMeshApp* app, const char* text, uint32_t to_node) {
-    if(!app || !app->serial || !text || text[0] == '\0') return;
+    if(!app || !fm_transport_ready(app) || !text || text[0] == '\0') return;
 
     meshtastic_ToRadio to    = meshtastic_ToRadio_init_default;
     to.which_payload_variant = meshtastic_ToRadio_packet_tag;
@@ -144,7 +138,12 @@ void fm_proto_send_text(FlipMeshApp* app, const char* text, uint32_t to_node) {
         return;
     }
 
-    send_frame(app, buf, os.bytes_written);
+    if(!fm_transport_tx(app, buf, os.bytes_written)) {
+        app->tx_err++;
+        fm_log(app, "TX transport fail");
+        fm_status(app, "Send failed");
+        return;
+    }
     fm_history_add(app, text, app->self_id, to_node, true);
     fm_log(app, "TX: %s", text);
     fm_status(app, "Sent!");
@@ -320,6 +319,11 @@ static void decode_fromradio(FlipMeshApp* app, const uint8_t* frame, size_t len)
     }
 }
 
+void fm_proto_deliver_fromradio(FlipMeshApp* app, const uint8_t* payload, size_t len) {
+    if(!app || !payload || len == 0) return;
+    decode_fromradio(app, payload, len);
+}
+
 /* ── RX thread ────────────────────────────────────────────────────────────── */
 
 int32_t fm_rx_thread(void* ctx) {
@@ -329,10 +333,57 @@ int32_t fm_rx_thread(void* ctx) {
     while(!app->quit) {
         if(furi_stream_buffer_receive(app->rx_stream, &b, 1, 100) > 0) {
             if(framing_feed(app, b)) {
-                decode_fromradio(app, app->frame_buf, app->frame_len);
+                fm_proto_deliver_fromradio(app, app->frame_buf, app->frame_len);
                 framing_reset(app);
             }
         }
     }
     return 0;
+}
+
+/* ── Heartbeat timer (transport-agnostic) ───────────────────────────────── */
+
+static void hb_timer_cb(void* ctx) {
+    FlipMeshApp* app = (FlipMeshApp*)ctx;
+    if(!app) return;
+    fm_proto_heartbeat(app);
+}
+
+void fm_hb_start(FlipMeshApp* app) {
+    if(!app || !app->transport_heartbeat_allowed) return;
+    if(!fm_transport_ready(app)) return;
+    if(app->hb_timer) {
+        furi_timer_stop(app->hb_timer);
+        furi_timer_free(app->hb_timer);
+    }
+    static const uint32_t intervals_ms[] = {10000, 30000, 60000};
+    uint8_t idx = app->hb_idx;
+    if(idx >= 3) idx = 1;
+    app->hb_timer = furi_timer_alloc(hb_timer_cb, FuriTimerTypePeriodic, app);
+    furi_timer_start(app->hb_timer, intervals_ms[idx]);
+}
+
+void fm_hb_stop(FlipMeshApp* app) {
+    if(!app || !app->hb_timer) return;
+    furi_timer_stop(app->hb_timer);
+    furi_timer_free(app->hb_timer);
+    app->hb_timer = NULL;
+}
+
+void fm_proto_transport_set_ready(FlipMeshApp* app, bool ready) {
+#if defined(FM_APP_BT)
+    if(!app) return;
+    app->bt_link_ready = ready;
+    if(!ready) {
+        fm_hb_stop(app);
+        app->conn = FM_CONN_IDLE;
+        snprintf(app->ble_status, sizeof(app->ble_status), "Idle");
+        fm_status(app, "Disconnected");
+    } else {
+        snprintf(app->ble_status, sizeof(app->ble_status), "Link up");
+    }
+#else
+    (void)app;
+    (void)ready;
+#endif
 }

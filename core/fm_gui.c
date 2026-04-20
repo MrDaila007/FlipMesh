@@ -3,8 +3,14 @@
 
 #include "fm_gui.h"
 #include "fm_notify.h"
-#include "fm_uart.h"
 #include "fm_protocol.h"
+
+#if defined(FM_APP_BT)
+void fm_bt_scan_action(FlipMeshApp* app);
+void fm_bt_connect_action(FlipMeshApp* app);
+#else
+void fm_uart_reopen(FlipMeshApp* app, FuriHalSerialId new_id, uint32_t new_baud);
+#endif
 #include "fm_history.h"
 #include "fm_roster.h"
 #include "fm_position.h"
@@ -20,23 +26,24 @@
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
+static const char* lmh_names[]       = {"Scroll", "Wrap"};
+static const char* conn_labels[]     = {"--", "SYNC", "OK"};
+
+#if !defined(FM_APP_BT)
 static const uint32_t baud_options[] = {
     9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
 };
 #define BAUD_COUNT ((uint8_t)(sizeof(baud_options) / sizeof(baud_options[0])))
-
-static const char* lmh_names[]       = {"Scroll", "Wrap"};
-static const char* hb_names[]        = {"10s", "30s", "60s"};
-static const char* conn_labels[]     = {"--", "SYNC", "OK"};
-
-/* ── Drawing helpers ──────────────────────────────────────────────────────── */
-
+static const char* hb_names[] = {"10s", "30s", "60s"};
 static uint8_t baud_to_idx(uint32_t baud) {
     for(uint8_t i = 0; i < BAUD_COUNT; i++) {
         if(baud_options[i] == baud) return i;
     }
     return 4; /* default 115200 */
 }
+#endif
+
+/* ── Drawing helpers ──────────────────────────────────────────────────────── */
 
 static void draw_str_ellipsis(Canvas* canvas, int x, int y, int max_w, const char* s) {
     if(!s || max_w <= 0) return;
@@ -600,10 +607,19 @@ static void render_stats(Canvas* canvas, FlipMeshApp* app) {
     char buf[48];
     int y = 24;
 
+#if defined(FM_APP_BT)
+    canvas_draw_str(canvas, 2, y, "Transport: BLE"); y += 9;
+    snprintf(buf, sizeof(buf), "State: %s", app->ble_status);
+    canvas_draw_str(canvas, 2, y, buf); y += 9;
+    snprintf(buf, sizeof(buf), "Reconn: %lu  TXfail: %lu",
+             (unsigned long)app->ble_reconnect_cnt, (unsigned long)app->ble_tx_fail);
+    canvas_draw_str(canvas, 2, y, buf); y += 9;
+#else
     snprintf(buf, sizeof(buf), "%s @ %lu",
              (app->uart_id == FuriHalSerialIdUsart) ? "USART" : "LPUART",
              (unsigned long)app->baud);
     canvas_draw_str(canvas, 2, y, buf); y += 9;
+#endif
 
     snprintf(buf, sizeof(buf), "RX: %lu bytes / %lu frm",
              (unsigned long)app->rx_bytes, (unsigned long)app->rx_ok);
@@ -679,6 +695,50 @@ static void render_settings(Canvas* canvas, FlipMeshApp* app) {
     typedef struct { const char* label; char val[24]; } Row;
     Row rows[FM_SET_COUNT];
 
+#if defined(FM_APP_BT)
+    snprintf(rows[FM_SET_BT_STATUS].val, 24, "%.23s", app->ble_status);
+    rows[FM_SET_BT_STATUS].label = "BLE";
+
+    snprintf(rows[FM_SET_BT_SCAN].val, 24, "Run");
+    rows[FM_SET_BT_SCAN].label = "Scan";
+
+    snprintf(rows[FM_SET_BT_CONNECT].val, 24, "%s",
+             app->bt_link_ready ? "Disconnect" : "Connect");
+    rows[FM_SET_BT_CONNECT].label = "Link";
+
+    snprintf(rows[FM_SET_BT_AUTO].val, 24, "%s",
+             app->ble_auto_reconnect ? "On" : "Off");
+    rows[FM_SET_BT_AUTO].label = "AutoRecon";
+
+    snprintf(rows[FM_SET_BT_HEARTBEAT].val, 24, "%s",
+             app->transport_heartbeat_allowed ? "On" : "Off");
+    rows[FM_SET_BT_HEARTBEAT].label = "Mesh HB";
+
+    snprintf(rows[FM_SET_VIBRO].val, 24, "%s", app->vib_on ? "On" : "Off");
+    rows[FM_SET_VIBRO].label = "Vibro";
+
+    snprintf(rows[FM_SET_LED].val, 24, "%s", app->led_on ? "On" : "Off");
+    rows[FM_SET_LED].label = "LED";
+
+    snprintf(rows[FM_SET_TONE].val, 24, "%s",
+             fm_tone_name(app->tone));
+    rows[FM_SET_TONE].label = "Ringtone";
+
+    snprintf(rows[FM_SET_SCROLL_SPD].val, 24, "%u", app->scroll_spd);
+    rows[FM_SET_SCROLL_SPD].label = "Scroll spd";
+
+    snprintf(rows[FM_SET_FRAMERATE].val, 24, "%u fps", app->framerate);
+    rows[FM_SET_FRAMERATE].label = "Framerate";
+
+    snprintf(rows[FM_SET_LONG_MSG].val, 24, "%s", lmh_names[app->long_msg]);
+    rows[FM_SET_LONG_MSG].label = "Long msg";
+
+    snprintf(rows[FM_SET_CHANNELS].val, 24, "%u", app->num_ch);
+    rows[FM_SET_CHANNELS].label = "Channels";
+
+    snprintf(rows[FM_SET_TIMESTAMPS].val, 24, "%s", app->show_ts ? "On" : "Off");
+    rows[FM_SET_TIMESTAMPS].label = "Timestamps";
+#else
     snprintf(rows[FM_SET_UART].val, 24, "%s",
              (app->uart_id == FuriHalSerialIdUsart) ? "USART" : "LPUART");
     rows[FM_SET_UART].label = "UART";
@@ -714,6 +774,7 @@ static void render_settings(Canvas* canvas, FlipMeshApp* app) {
 
     snprintf(rows[FM_SET_TIMESTAMPS].val, 24, "%s", app->show_ts ? "On" : "Off");
     rows[FM_SET_TIMESTAMPS].label = "Timestamps";
+#endif
 
     int y = 24;
     for(uint8_t i = 0; i < FM_SET_COUNT && y < 64; i++) {
@@ -771,6 +832,25 @@ void render_cb(Canvas* canvas, void* ctx) {
 
 static void setting_change(FlipMeshApp* app, int dir) {
     switch(app->set_cursor) {
+#if defined(FM_APP_BT)
+    case FM_SET_BT_STATUS:
+        break;
+    case FM_SET_BT_SCAN:
+        fm_bt_scan_action(app);
+        break;
+    case FM_SET_BT_CONNECT:
+        fm_bt_connect_action(app);
+        break;
+    case FM_SET_BT_AUTO:
+        app->ble_auto_reconnect = !app->ble_auto_reconnect;
+        break;
+    case FM_SET_BT_HEARTBEAT:
+        app->transport_heartbeat_allowed = !app->transport_heartbeat_allowed;
+        if(app->conn == FM_CONN_LIVE) fm_hb_start(app);
+        else
+            fm_hb_stop(app);
+        break;
+#else
     case FM_SET_UART:
         app->uart_id = (app->uart_id == FuriHalSerialIdUsart)
             ? FuriHalSerialIdLpuart : FuriHalSerialIdUsart;
@@ -782,6 +862,7 @@ static void setting_change(FlipMeshApp* app, int dir) {
         fm_uart_reopen(app, app->uart_id, app->baud);
         break;
     }
+#endif
     case FM_SET_VIBRO:
         app->vib_on = !app->vib_on;
         break;
@@ -817,6 +898,7 @@ static void setting_change(FlipMeshApp* app, int dir) {
         app->long_msg = (FMLongMsg)v;
         break;
     }
+#if !defined(FM_APP_BT)
     case FM_SET_HEARTBEAT: {
         int v = (int)app->hb_idx + dir;
         if(v < 0) v = 2;
@@ -825,6 +907,7 @@ static void setting_change(FlipMeshApp* app, int dir) {
         fm_hb_start(app);
         break;
     }
+#endif
     case FM_SET_CHANNELS: {
         int v = (int)app->num_ch + dir;
         if(v < 1) v = FM_MAX_CHANNELS;

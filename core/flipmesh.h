@@ -51,7 +51,11 @@
 #define FM_MAX_CHANNELS  8
 
 /* ── Paths ───────────────────────────────────────────────────────────────── */
+#if defined(FM_APP_BT)
+#define FM_SETTINGS_PATH "/ext/flipmesh-bt/settings.cfg"
+#else
 #define FM_SETTINGS_PATH "/ext/flipmesh/settings.cfg"
+#endif
 
 /* ── Tones (notification sounds) ─────────────────────────────────────────── */
 typedef enum {
@@ -99,6 +103,24 @@ typedef enum {
 } FMRosterView;
 
 /* ── Settings items ──────────────────────────────────────────────────────── */
+#if defined(FM_APP_BT)
+typedef enum {
+    FM_SET_BT_STATUS = 0,
+    FM_SET_BT_SCAN,
+    FM_SET_BT_CONNECT,
+    FM_SET_BT_AUTO,
+    FM_SET_BT_HEARTBEAT,
+    FM_SET_VIBRO,
+    FM_SET_LED,
+    FM_SET_TONE,
+    FM_SET_SCROLL_SPD,
+    FM_SET_FRAMERATE,
+    FM_SET_LONG_MSG,
+    FM_SET_CHANNELS,
+    FM_SET_TIMESTAMPS,
+    FM_SET_COUNT,
+} FMSetting;
+#else
 typedef enum {
     FM_SET_UART = 0,
     FM_SET_BAUD,
@@ -113,6 +135,7 @@ typedef enum {
     FM_SET_TIMESTAMPS,
     FM_SET_COUNT,
 } FMSetting;
+#endif
 
 /* ── Data structures ─────────────────────────────────────────────────────── */
 
@@ -253,6 +276,14 @@ typedef struct {
     uint8_t  set_cursor;
     bool     set_editing;
 
+    /* BLE transport (BT app); unused on UART */
+    bool     bt_link_ready;
+    bool     ble_auto_reconnect;
+    bool     transport_heartbeat_allowed;
+    char     ble_status[40];
+    uint32_t ble_reconnect_cnt;
+    uint32_t ble_tx_fail;
+
     /* Keyboard */
     bool            kb_active;
     char            kb_buf[64];
@@ -263,5 +294,3 @@ typedef struct {
 /* ── Shared helpers ──────────────────────────────────────────────────────── */
 void fm_log(FlipMeshApp* app, const char* fmt, ...);
 void fm_status(FlipMeshApp* app, const char* msg);
-
-int32_t flipmesh_app_entry(void* p);

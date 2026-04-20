@@ -27,22 +27,31 @@ void settings_save(FlipMeshApp* app) {
     if(!app) return;
 
     Storage* storage = furi_record_open(RECORD_STORAGE);
+#if defined(FM_APP_BT)
+    storage_common_mkdir(storage, "/ext/flipmesh-bt");
+#else
     storage_common_mkdir(storage, "/ext/flipmesh");
+#endif
 
     File* file = storage_file_alloc(storage);
     if(storage_file_open(file, FM_SETTINGS_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
-        write_kv_int(file, "version",      SETTINGS_VERSION);
-        write_kv_int(file, "uart_id",      (int)app->uart_id);
-        write_kv_int(file, "baud",         (int)app->baud);
-        write_kv_int(file, "vibro",        app->vib_on  ? 1 : 0);
-        write_kv_int(file, "led",          app->led_on  ? 1 : 0);
-        write_kv_int(file, "ringtone",     (int)app->tone);
+        write_kv_int(file, "version", SETTINGS_VERSION);
+#if !defined(FM_APP_BT)
+        write_kv_int(file, "uart_id", (int)app->uart_id);
+        write_kv_int(file, "baud", (int)app->baud);
+        write_kv_int(file, "hb_idx", (int)app->hb_idx);
+#else
+        write_kv_int(file, "ble_auto", app->ble_auto_reconnect ? 1 : 0);
+        write_kv_int(file, "ble_mesh_hb", app->transport_heartbeat_allowed ? 1 : 0);
+#endif
+        write_kv_int(file, "vibro", app->vib_on ? 1 : 0);
+        write_kv_int(file, "led", app->led_on ? 1 : 0);
+        write_kv_int(file, "ringtone", (int)app->tone);
         write_kv_int(file, "scroll_speed", (int)app->scroll_spd);
-        write_kv_int(file, "scroll_fps",   (int)app->framerate);
-        write_kv_int(file, "lmh_mode",     (int)app->long_msg);
-        write_kv_int(file, "hb_idx",       (int)app->hb_idx);
-        write_kv_int(file, "channels",     (int)app->num_ch);
-        write_kv_int(file, "timestamps",   app->show_ts ? 1 : 0);
+        write_kv_int(file, "scroll_fps", (int)app->framerate);
+        write_kv_int(file, "lmh_mode", (int)app->long_msg);
+        write_kv_int(file, "channels", (int)app->num_ch);
+        write_kv_int(file, "timestamps", app->show_ts ? 1 : 0);
         storage_file_close(file);
     }
     storage_file_free(file);
@@ -61,11 +70,30 @@ typedef enum { PS_KEY, PS_VAL, PS_DONE } ParsePhase;
 
 static void dispatch(FlipMeshApp* app, const char* key, const char* val) {
     int v = atoi(val);
+#if !defined(FM_APP_BT)
     if(!strcmp(key, "uart_id")) {
         app->uart_id = (v == 1) ? FuriHalSerialIdLpuart : FuriHalSerialIdUsart;
-    } else if(!strcmp(key, "baud")) {
+        return;
+    }
+    if(!strcmp(key, "baud")) {
         if(v > 0) app->baud = (uint32_t)v;
-    } else if(!strcmp(key, "vibro")) {
+        return;
+    }
+    if(!strcmp(key, "hb_idx")) {
+        if(v >= 0 && v <= 2) app->hb_idx = (uint8_t)v;
+        return;
+    }
+#else
+    if(!strcmp(key, "ble_auto")) {
+        app->ble_auto_reconnect = (v != 0);
+        return;
+    }
+    if(!strcmp(key, "ble_mesh_hb")) {
+        app->transport_heartbeat_allowed = (v != 0);
+        return;
+    }
+#endif
+    if(!strcmp(key, "vibro")) {
         app->vib_on = (v != 0);
     } else if(!strcmp(key, "led")) {
         app->led_on = (v != 0);
@@ -77,8 +105,6 @@ static void dispatch(FlipMeshApp* app, const char* key, const char* val) {
         if(v >= 1 && v <= 10) app->framerate = (uint8_t)v;
     } else if(!strcmp(key, "lmh_mode")) {
         if(v >= 0 && v < FM_LMH_COUNT) app->long_msg = (FMLongMsg)v;
-    } else if(!strcmp(key, "hb_idx")) {
-        if(v >= 0 && v <= 2) app->hb_idx = (uint8_t)v;
     } else if(!strcmp(key, "channels")) {
         if(v >= 1 && v <= FM_MAX_CHANNELS) app->num_ch = (uint8_t)v;
     } else if(!strcmp(key, "timestamps")) {

@@ -36,6 +36,12 @@ In the Meshtastic mobile app or web interface:
 
 > The node must be in **PROTO** mode (not TEXT or NMEA) — FlipMesh speaks the binary protobuf framing protocol.
 
+## Bluetooth (BLE app)
+
+The **`apps/bt`** target is for Meshtastic over BLE (GATT: Meshtastic service `6ba1b218-15a8-461f-9fa8-5dcae273eafd`, `ToRadio` / `FromRadio` / `FromNum`). On **stock Flipper firmware**, a third-party FAP generally **cannot** act as a BLE **central** (scanner + GATT client) using the same public APIs as UART — see **`docs/ble-feasibility-report.md`**.
+
+Until a supported stack exists, use **FlipMesh UART** with the wiring above, or a phone / PC client for BLE.
+
 ## UART selection in FlipMesh
 
 FlipMesh supports both Flipper Zero UART interfaces:

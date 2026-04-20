@@ -4,40 +4,53 @@
 
 ```
 flipmesh/
-├── application.fam          — FAP manifest (stack, icon, libs)
-├── flipmesh.h               — single shared header: all types, constants, FlipMeshApp
-├── fm_app.c                 — entry point, lifecycle, main loop
-├── fm_channel.c/.h          — channel metadata (names from config sync)
-├── fm_gui.c/.h              — all 7 pages: render + input dispatch
-├── fm_history.c/.h          — message ring buffer; fm_log / fm_status helpers
-├── fm_notify.c/.h           — vibration, LED, 19 speaker tones
-├── fm_position.c/.h         — GPS coordinate formatting, integer distance calc
-├── fm_protocol.c/.h         — framing state machine, nanopb TX/RX, heartbeat
-├── fm_roster.c/.h           — node list CRUD (NodeInfo / Position / Telemetry)
-├── fm_settings.c/.h         — SD-card settings load/save (key=value)
-├── fm_uart.c/.h             — UART open/close/reopen, heartbeat FuriTimer
-├── icons/flipmesh_10.png    — 10×10 px FAP icon (mesh triangle)
-└── lib/
-    ├── nanopb/              — protobuf library (0.4.9.1)
-    └── meshtastic_api/meshtastic/
-                             — generated .pb.h/.pb.c from Meshtastic 2.7.22
+├── core/                         — shared Meshtastic client (transport-agnostic)
+│   ├── flipmesh.h                — types, constants, FlipMeshApp
+│   ├── fm_transport.h            — TX / ready hooks (implemented per app)
+│   ├── fm_channel.c/.h
+│   ├── fm_gui.c/.h
+│   ├── fm_history.c/.h
+│   ├── fm_notify.c/.h
+│   ├── fm_position.c/.h
+│   ├── fm_protocol.c/.h          — UART framing + RX thread; nanopb; heartbeat timer
+│   ├── fm_roster.c/.h
+│   ├── fm_settings.c/.h
+│   └── lib/                      — nanopb + meshtastic_api (same as before)
+├── apps/uart/                    — FlipMesh UART (`flipmesh_uart` FAP)
+│   ├── application.fam
+│   ├── flipmesh_uart_app.c       — entry, main loop, RX thread + UART open
+│   ├── fm_uart.c/.h              — serial ISR → rx_stream
+│   ├── fm_transport_uart.c       — framing + furi_hal_serial TX
+│   ├── lib/                      — symlinks into core (private_libs layout for uFBT)
+│   └── icons/
+├── apps/bt/                      — FlipMesh BLE (`flipmesh_bt` FAP)
+│   ├── application.fam
+│   ├── flipmesh_bt_app.c         — entry, main loop (no RX thread until BLE exists)
+│   ├── fm_bt_transport.c/.h      — BLE transport stub + fm_transport_* implementation
+│   ├── lib/
+│   └── icons/
+└── docs/
 ```
+
+Build each FAP from its app directory (`cd apps/uart && ufbt build`, etc.).
 
 ---
 
 ## Threading model
 
-FlipMesh runs exactly two threads under Furi RTOS:
+**UART app** runs two threads under Furi RTOS:
 
 ```
 Main thread                          RX thread  (fm_rx_thread)
 ────────────────────────             ────────────────────────────────
 UI render  (render_cb)               furi_stream_buffer_receive
 Input      (input_cb)                framing_feed() — byte by byte
-Keyboard overlay                     nanopb decode (FromRadio)
+Keyboard overlay                     fm_proto_deliver_fromradio()
 Settings save / load                 update roster / history / log
 fm_proto_sync()                      fm_notify_message()
 ```
+
+**BLE app** uses the main thread only today (no `fm_rx_thread`); when a BLE stack is integrated, a second thread or BLE callbacks should feed `fm_proto_deliver_fromradio()` with raw `FromRadio` payloads (no UART framing).
 
 Shared state lives entirely in `FlipMeshApp`. Every access from either thread
 is wrapped in `furi_mutex_acquire(app->lock, FuriWaitForever)` /
@@ -60,7 +73,7 @@ fm_rx_thread
       │         [0x94][0xC3][len_hi][len_lo] → payload[0..len-1]
       │         5 bad-magic bytes in a row → "Resyncing..." + reset
       │
-      └── decode_fromradio()
+      └── fm_proto_deliver_fromradio()
                 ├── packet → decode_packet()
                 │       ├── port 1  TEXT_MESSAGE_APP  → fm_history_add + notify
                 │       ├── port 3  POSITION_APP      → fm_node_update_pos
@@ -79,7 +92,7 @@ TX path:
     → main loop opens TextInput overlay (view_dispatcher_run)
     → text_input_callback()
     → fm_proto_send_text()
-    → nanopb encode → send_frame() → furi_hal_serial_tx
+    → nanopb encode → fm_transport_tx() (UART: framing + serial; BT: GATT when implemented)
 ```
 
 ---
@@ -112,10 +125,13 @@ bad frames → 5 consecutive bad-magic events → auto-resync log entry.
 
 | Module | Public API highlights |
 |--------|-----------------------|
-| `fm_app.c` | `flipmesh_app_entry()` — allocates `FlipMeshApp`, wires callbacks, runs main loop |
+| `apps/uart/flipmesh_uart_app.c` | `flipmesh_uart_app_entry()` — lifecycle, UART + RX thread |
+| `apps/bt/flipmesh_bt_app.c` | `flipmesh_bt_app_entry()` — lifecycle, BLE glue (stub) |
 | `fm_gui.c/.h` | `render_cb`, `input_cb`, `text_input_callback`, `kb_back_callback` |
-| `fm_protocol.c/.h` | `fm_proto_sync`, `fm_proto_heartbeat`, `fm_proto_send_text`, `fm_rx_thread` |
-| `fm_uart.c/.h` | `fm_uart_open`, `fm_uart_close`, `fm_uart_reopen`, `fm_hb_start`, `fm_hb_stop` |
+| `fm_protocol.c/.h` | `fm_proto_sync`, `fm_proto_heartbeat`, `fm_proto_send_text`, `fm_proto_deliver_fromradio`, `fm_hb_*`, `fm_rx_thread`, `fm_proto_transport_set_ready` |
+| `fm_transport.h` | `fm_transport_tx`, `fm_transport_ready` — implemented per app |
+| `apps/uart/fm_uart.c/.h` | `fm_uart_open`, `fm_uart_close`, `fm_uart_reopen` |
+| `apps/bt/fm_bt_transport.c/.h` | BLE transport stub + `fm_transport_*` |
 | `fm_roster.c/.h` | `fm_node_get`, `fm_node_update_info/user/signal/metrics/env/pos`, `fm_node_mark_dm`, `fm_node_display` |
 | `fm_history.c/.h` | `fm_history_add`, `fm_log`, `fm_status` |
 | `fm_channel.c/.h` | `fm_ch_init`, `fm_ch_next`, `fm_ch_set`, `fm_ch_set_meta`, `fm_ch_label` |

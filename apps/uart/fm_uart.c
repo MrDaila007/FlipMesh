@@ -2,8 +2,8 @@
 // Copyright (c) 2025 DanilaE
 
 #include "fm_uart.h"
-#include "fm_history.h"
-#include "fm_protocol.h"
+#include "../../core/fm_history.h"
+#include "../../core/fm_protocol.h"
 
 #define TAG "flipmesh"
 
@@ -15,12 +15,6 @@ static void rx_cb(FuriHalSerialHandle* handle, FuriHalSerialRxEvent event, void*
         app->rx_bytes++;
         furi_stream_buffer_send(app->rx_stream, &b, 1, 0);
     }
-}
-
-static void heartbeat_timer_cb(void* ctx) {
-    FlipMeshApp* app = (FlipMeshApp*)ctx;
-    if(!app || !app->serial) return;
-    fm_proto_heartbeat(app);
 }
 
 void fm_uart_open(FlipMeshApp* app) {
@@ -55,24 +49,4 @@ void fm_uart_reopen(FlipMeshApp* app, FuriHalSerialId new_id, uint32_t new_baud)
     app->uart_id = new_id;
     app->baud = new_baud;
     fm_uart_open(app);
-}
-
-void fm_hb_start(FlipMeshApp* app) {
-    if(!app) return;
-    if(app->hb_timer) {
-        furi_timer_stop(app->hb_timer);
-        furi_timer_free(app->hb_timer);
-    }
-    static const uint32_t intervals_ms[] = {10000, 30000, 60000};
-    uint8_t idx = app->hb_idx;
-    if(idx >= 3) idx = 1;
-    app->hb_timer = furi_timer_alloc(heartbeat_timer_cb, FuriTimerTypePeriodic, app);
-    furi_timer_start(app->hb_timer, intervals_ms[idx]);
-}
-
-void fm_hb_stop(FlipMeshApp* app) {
-    if(!app || !app->hb_timer) return;
-    furi_timer_stop(app->hb_timer);
-    furi_timer_free(app->hb_timer);
-    app->hb_timer = NULL;
 }

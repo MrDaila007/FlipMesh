@@ -1,8 +1,10 @@
 # Meshtastic Serial Protocol
 
-FlipMesh communicates with Meshtastic nodes using the binary serial protocol over UART.
+FlipMesh communicates with Meshtastic using the same **protobuf** types as upstream (`meshtastic_ToRadio` / `meshtastic_FromRadio`). The **UART** app wraps payloads in a 4-byte serial header (below). The **BLE** app (when implemented) would send/receive **raw protobuf** on Meshtastic GATT characteristics (no `0x94 0xC3` framing). See `docs/ble-feasibility-report.md` for stock Flipper BLE central limitations.
 
-## Frame format
+**Heartbeat:** enabled by default on UART (Meshtastic serial timeout). On the BLE app, optional mesh heartbeat defaults **off** (`transport_heartbeat_allowed`); enable in Settings if your link needs it.
+
+## Frame format (UART only)
 
 Every message is wrapped in a 4-byte header followed by a protobuf payload:
 

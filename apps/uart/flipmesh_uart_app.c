@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2025 DanilaE
 
-#include "flipmesh.h"
-#include "fm_gui.h"
+#include "../../core/flipmesh.h"
+#include "../../core/fm_gui.h"
 #include "fm_uart.h"
-#include "fm_protocol.h"
-#include "fm_settings.h"
-#include "fm_channel.h"
-#include "fm_notify.h"
+#include "../../core/fm_protocol.h"
+#include "../../core/fm_settings.h"
+#include "../../core/fm_channel.h"
+#include "../../core/fm_notify.h"
 
-int32_t flipmesh_app_entry(void* p) {
+int32_t flipmesh_uart_app_entry(void* p) {
     (void)p;
 
     FlipMeshApp* app = malloc(sizeof(FlipMeshApp));
     memset(app, 0, sizeof(FlipMeshApp));
+
+    app->transport_heartbeat_allowed = true;
 
     /* Heap-allocate frame buffer to keep app struct size down */
     app->frame_buf = malloc(FM_MAX_FRAME);

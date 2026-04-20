@@ -114,7 +114,9 @@ If no node has position data, shows "No position data yet".
 
 ## Page 3 — Stats
 
-Counters and link statistics:
+Counters and link statistics.
+
+**UART app** (`apps/uart`):
 
 ```
 < Stats              4/7 >
@@ -125,7 +127,7 @@ TX: 5 frm  nodes: 8
 HB: 47 sent
 ```
 
-Fields: UART type and baud, total bytes received, frames decoded OK, error counts (bad magic / length / decode), TX frames, roster size, heartbeats sent.
+**BLE app** (`apps/bt`): shows transport label, BLE status string, reconnect / TX-fail counters, then shared RX/TX/node lines when applicable.
 
 ---
 
@@ -167,42 +169,58 @@ Rolling system log — up to 20 entries, 5 visible at a time:
 
 ## Page 6 — Settings
 
-11 settings, edited in-place with left/right arrows:
+Edited in-place with left/right arrows (shared navigation: **Up/Down** cursor, **OK** edit, **Left/Right** change value, **Back** exit edit). Settings auto-save after each change.
+
+### UART app (`apps/uart`)
 
 ```
 < Settings           7/7 >
 UART          USART
 Baud          115200
 Vibro         On
-LED           On
-Ringtone      Chime
-Scroll spd    5
-Framerate     4 fps
-Long msg      Wrap
+...
 Heartbeat     30s
-Channels      3
-Timestamps    On
 ```
-
-- **Up/Down** — move cursor between items
-- **OK** — enter edit mode for selected item (arrows shown: `< value >`)
-- **Left/Right in edit** — cycle value
-- **Back in edit** — exit edit mode; settings auto-saved to SD card
-
-### Settings reference
 
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
 | UART | USART / LPUART | USART | Which serial port (GPIO 13/14 vs 15/16) |
-| Baud | 9600 / 19200 / 38400 / 57600 / **115200** / 230400 / 460800 / 921600 | 115200 | Must match Meshtastic node config |
+| Baud | 9600 … **115200** … 921600 | 115200 | Must match Meshtastic node config |
+| Heartbeat | 10s / 30s / 60s | 30s | Keep-alive for Meshtastic serial timeout |
+| … | (shared rows below) | | |
+
+Persisted to **`/ext/flipmesh/settings.cfg`** (legacy path).
+
+### BLE app (`apps/bt`)
+
+```
+BLE           No central stack
+Scan          Run
+Link          Connect
+AutoRecon     On
+Mesh HB       Off
+Vibro         On
+...
+```
+
+| Setting | Effect |
+|---------|--------|
+| BLE | Status text (stub until GATT client exists) |
+| Scan / Link | Placeholder actions; see `docs/ble-feasibility-report.md` |
+| AutoRecon | Persisted preference for future reconnect policy |
+| Mesh HB | Optional Meshtastic heartbeat when a link exists (default Off) |
+
+Persisted to **`/ext/flipmesh-bt/settings.cfg`**.
+
+### Shared rows (both apps)
+
+| Setting | Values | Default | Effect |
+|---------|--------|---------|--------|
 | Vibro | On / Off | On | Vibrate on incoming message |
 | LED | On / Off | On | Blink LED on incoming message |
 | Ringtone | Off / 18 tones | Ping | Notification sound |
 | Scroll spd | 1–10 | 5 | Horizontal scroll speed (10 = fastest) |
 | Framerate | 1–10 fps | 4 | UI refresh rate |
-| Long msg | Scroll / Wrap | Scroll | How text longer than the bubble is handled |
-| Heartbeat | 10s / 30s / 60s | 30s | How often a heartbeat is sent to keep the connection alive |
-| Channels | 1–8 | 3 | Number of Meshtastic channels available for cycling |
-| Timestamps | On / Off | Off | Show `HH:MM` (uptime-based) in message bubbles |
-
-Settings are persisted to `/ext/flipmesh/settings.cfg` on the SD card immediately after each change.
+| Long msg | Scroll / Wrap | Scroll | Long text in bubbles |
+| Channels | 1–8 | 3 | Channels for cycling on Messages |
+| Timestamps | On / Off | Off | `HH:MM` in bubbles |

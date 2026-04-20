@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: Build FAP
+  build-uart:
+    name: Build UART FAP
     runs-on: ubuntu-latest
 
     steps:
@@ -17,16 +17,38 @@ jobs:
 
       - name: Build with uFBT
         uses: flipperdevices/flipperzero-ufbt-action@v0.1
-        id: build-app
+        id: build-uart
         with:
-          app-dir: .
+          app-dir: apps/uart
           sdk-channel: release
 
-      - name: Upload FAP artifact
+      - name: Upload UART FAP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: flipmesh-fap
-          path: ${{ steps.build-app.outputs.fap-name }}
+          name: flipmesh_uart-fap
+          path: ${{ steps.build-uart.outputs.fap-name }}
+          retention-days: 30
+
+  build-bt:
+    name: Build BLE FAP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with uFBT
+        uses: flipperdevices/flipperzero-ufbt-action@v0.1
+        id: build-bt
+        with:
+          app-dir: apps/bt
+          sdk-channel: release
+
+      - name: Upload BT FAP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flipmesh_bt-fap
+          path: ${{ steps.build-bt.outputs.fap-name }}
           retention-days: 30
 
   lint:
@@ -40,7 +62,7 @@ jobs:
       - name: Check SPDX headers
         run: |
           missing=0
-          for f in *.c *.h; do
+          for f in core/*.c core/*.h apps/uart/*.c apps/uart/*.h apps/bt/*.c apps/bt/*.h; do
             [ -f "$f" ] || continue
             if ! grep -q "SPDX-License-Identifier" "$f"; then
               echo "Missing SPDX header: $f"
@@ -51,7 +73,7 @@ jobs:
 
       - name: Check for trailing whitespace
         run: |
-          if grep -rn " $" --include="*.c" --include="*.h" .; then
+          if grep -rn " $" --include="*.c" --include="*.h" core apps/uart apps/bt; then
             echo "Trailing whitespace found"
             exit 1
           fi

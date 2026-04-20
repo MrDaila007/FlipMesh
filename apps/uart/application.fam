@@ -1,0 +1,34 @@
+App(
+    appid="flipmesh_uart",
+    name="FlipMesh UART",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="flipmesh_uart_app_entry",
+    requires=["gui"],
+    stack_size=10 * 1024,
+    fap_icon="icons/flipmesh_10.png",
+    fap_category="Tools",
+    fap_author="DanilaE",
+    fap_weburl="https://github.com/DanilaE/FlipMesh",
+    fap_version="1.0",
+    fap_description="Meshtastic client (UART serial)",
+    sources=["*.c"],
+    cdefines=["FM_APP_UART=1"],
+    fap_private_libs=[
+        Lib(
+            sources=["*.c"],
+            name="nanopb",
+            cflags=[],
+        ),
+        Lib(
+            sources=["meshtastic/*.pb.c"],
+            name="meshtastic_api",
+            cflags=[],
+        ),
+        Lib(
+            sources=["*.c"],
+            name="flipmesh_core",
+            cincludes=["../../core"],
+            cflags=[],
+        ),
+    ],
+)
