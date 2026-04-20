@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
 typedef enum {
     FuriHalSerialIdUsart  = 0,

@@ -2,6 +2,9 @@
 .ufbt/
 dist/
 
+# Host unit test binary
+tests/test_runner
+
 # Python
 *.pyc
 __pycache__/

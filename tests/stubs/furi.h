@@ -27,6 +27,7 @@ static inline void furi_mutex_release(FuriMutex* m) {
 }
 
 /* Time — implemented in tests/stubs.c, controllable via test_set_tick() */
+void     test_set_tick(uint32_t ms);
 uint32_t furi_get_tick(void);
 uint32_t furi_kernel_get_tick_frequency(void);
 
