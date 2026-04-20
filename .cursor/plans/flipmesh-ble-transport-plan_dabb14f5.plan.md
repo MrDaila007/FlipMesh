@@ -2,14 +2,23 @@
 name: flipmesh-ble-transport-plan
 overview: Разделить проект на два приложения (UART и BLE) в отдельных папках на общей core-базе, разрабатывать в отдельной feature-ветке без влияния на текущую рабочую версию.
 todos:
+  - id: ble-feasibility-spike
+    content: "Stage 0: подтвердить, что BLE GATT client в external FAP работает (go/no-go блокер)"
+    status: pending
   - id: branch-setup
     content: Подготовить отдельную feature-ветку для split-архитектуры без изменений main
+    status: pending
+  - id: app-manifest-layout
+    content: Зафиксировать manifest/layout для двух app targets (appid, entry_point, stack, icon, settings path, lib refs)
     status: pending
   - id: repo-split-layout
     content: Ввести структуру apps/uart и apps/bt с общим core для минимального дублирования
     status: pending
   - id: core-extraction
     content: Вынести общий протокол, модель данных и утилиты в shared core, отделить транспортные реализации
+    status: pending
+  - id: state-machines-split
+    content: Чётко разделить Transport state (линк) и Protocol state (IDLE/SYNC/LIVE) между app-wrapper и core
     status: pending
   - id: uart-app-wrapper
     content: Собрать UART-приложение как отдельную app-обвязку поверх shared core
@@ -69,13 +78,78 @@ flowchart LR
     state --> uiCommon
 ```
 
+## Cross-cutting: App manifest и layout
+
+Фиксируется один раз и используется всеми этапами.
+
+- `appid` и `entry_point`:
+  - UART app: `appid="flipmesh_uart"`, `entry_point="flipmesh_uart_app_entry"`.
+  - BT app: `appid="flipmesh_bt"`, `entry_point="flipmesh_bt_app_entry"`.
+  - Разные `appid` обязательны, иначе Flipper установит только одну версию.
+- `fap_icon`:
+  - UART: текущая иконка.
+  - BT: отдельная иконка, визуально отличимая в меню.
+- Settings path (раздельные, чтобы не пересекались):
+  - UART: `/ext/flipmesh/settings.cfg` (сохранить текущий путь ради обратной совместимости существующих пользователей).
+  - BT: `/ext/flipmesh-bt/settings.cfg`.
+- Shared code:
+  - Каноническое имя каталога — `core/` (не `shared/`), используется всюду в плане и коде.
+  - `core/lib/` (nanopb + meshtastic_api) подключается из обоих `application.fam` через `fap_private_libs` с относительными путями.
+- uFBT workspace:
+  - Каждый app имеет собственный `application.fam` в своём `apps/<name>/` каталоге.
+  - `ufbt build` вызывается из соответствующей папки.
+  - `core/` не содержит своего `application.fam`.
+- Stack/memory:
+  - UART app: `stack_size=10*1024` (как сейчас).
+  - BT app: пересмотреть, вероятно повысить (например 12–16 KB) после Stage 0 spike, финальное значение зафиксировать на этапе 5.
+- CI:
+  - Изменяется один файл: [.github/workflows/build.yml](/home/user/Documents/Meshtastic/ZeroMesh/flipmesh/.github/workflows/build.yml).
+  - Два отдельных job: UART build, BT build; оба обязательны для merge.
+- Tests / stubs:
+  - `tests/stubs/` остаётся в корне репозитория, используется на уровне unit-утилит (не привязан к конкретному app).
+
+## Разделение state machines (важно для согласованности)
+
+- Protocol state (общий, живёт в `core`): `FM_CONN_IDLE -> SYNC -> LIVE` (текущее поведение `want_config_id` / `config_complete_id`).
+- Transport state (живёт в app-wrapper):
+  - UART app: управляется внутри wrapper, наружу по сути всегда `ready` при открытом serial.
+  - BT app: `idle / scanning / device_selected / connecting / connected / reconnecting / error`.
+- Правила:
+  - Core не знает о transport state, только получает сигналы «готов / не готов отправлять».
+  - App-wrapper не знает о protocol state и не дублирует FSM synchronization.
+  - Транспорт сообщает core о готовности через явный callback (`core_on_transport_ready/not_ready`), а core решает, когда стартовать sync.
+- В BT app, состояние `connected_live` (из этапа 5) **не** означает Meshtastic LIVE — это только состояние BLE-линка. Meshtastic LIVE остаётся ответственностью `core`.
+
+## Heartbeat policy по транспортам
+
+- UART: heartbeat нужен из-за serial timeout Meshtastic — поведение как сейчас.
+- BT: heartbeat по BLE обычно не требуется; по умолчанию отключён. Оставить опцию в настройках, но дефолт = off.
+- Heartbeat timer lifecycle переезжает в `core` (это protocol-level поведение), но его активность включается/выключается app-wrapper через core API.
+
 ## Пошаговый план
+
+### 0) BLE feasibility spike (блокирующий gate)
+
+Цель: подтвердить, что BLE GATT client из external FAP действительно поддерживается на текущей прошивке Flipper, до любой реструктуризации.
+
+- [ ] Прототип в одной-двух ветках кода без модификации основного приложения.
+- [ ] Проверить доступность BLE central/GATT client через публичный SDK Flipper (`furi_hal_bt*`, профили).
+- [ ] Подтвердить сценарий:
+  - [ ] скан Meshtastic service UUID `6ba1b218-15a8-461f-9fa8-5dcae273eafd`;
+  - [ ] connect к устройству;
+  - [ ] write в `ToRadio` (`f75c76d2-129e-4dad-a1dd-7866124401e7`);
+  - [ ] subscribe/notify на `FromNum` (`ed9da18c-a800-4f66-a670-aa7547e34453`);
+  - [ ] read `FromRadio` (`2c55e69e-4993-11ed-b878-0242ac120002`).
+- [ ] Зафиксировать MTU (цель 512) и реальные ограничения в этом стеке.
+- [ ] Результат: короткий отчёт go / no-go + список ограничений и зависимостей (версия прошивки, сторонние компоненты, API).
+- [ ] Выход: при no-go — зафиксировать альтернативу (custom firmware / сторонний стек) и не переходить к этапам 2+ без решения.
 
 ### 1) Подготовка ветки и baseline
 - Создать feature-ветку для split-работы.
 - Зафиксировать текущий UART baseline как эталон поведения (smoke checklist: connect/sync/send/receive/logs/settings).
 
 #### 1.1 Детальный execution-чеклист первого этапа
+- [ ] Убедиться, что Stage 0 (BLE feasibility spike) завершён с результатом go. Если no-go — остановиться и согласовать альтернативу с пользователем.
 - [ ] Создать ветку вида `feat/split-uart-bt-apps` от текущего актуального `main`.
 - [ ] Зафиксировать текущий статус сборки UART (`ufbt build`) как baseline.
 - [ ] Прогнать ручной smoke-check UART и записать результат в `docs/baseline-uart.md`:
@@ -234,7 +308,9 @@ flowchart LR
 - Для BT сделать отдельный settings path/config format, чтобы не ломать UART-настройки.
 
 #### 5.1 BLE state machine (обязательный каркас)
-- [ ] Ввести явные состояния: `idle`, `scanning`, `device_selected`, `connecting`, `connected_syncing`, `connected_live`, `reconnecting`, `error`.
+- [ ] Ввести явные состояния **только transport уровня**: `idle`, `scanning`, `device_selected`, `connecting`, `connected`, `reconnecting`, `error`.
+- [ ] Состояния Meshtastic-протокола (`IDLE/SYNC/LIVE`) сюда **не** добавлять — они принадлежат `core` (см. раздел «Разделение state machines»).
+- [ ] При входе в `connected` вызвать `core_on_transport_ready(...)`; при выходе — `core_on_transport_not_ready(...)`.
 - [ ] Описать допустимые переходы и триггеры (кнопка, таймаут, notify, disconnect, retry_exhausted).
 - [ ] Переходы логировать в единый формат (для диагностики в Logs).
 
@@ -247,6 +323,12 @@ flowchart LR
   - [ ] read-loop `FromRadio` до пустого payload;
   - [ ] передача каждого `FromRadio` в `core_on_transport_rx`.
 - [ ] Реализовать TX path: `core -> transport_send -> ToRadio characteristic`.
+- [ ] MTU:
+  - [ ] запросить MTU = 512 (рекомендация Meshtastic);
+  - [ ] если стек выдал меньше — сохранить фактический MTU, фрагментация на уровне GATT уже не нужна (протокол без framing-заголовка в BLE), но ограничить максимальный `ToRadio` размер фактическим MTU минус ATT overhead.
+- [ ] Heartbeat:
+  - [ ] по умолчанию **отключить** (см. раздел «Heartbeat policy»);
+  - [ ] оставить тумблер в BT Settings.
 - [ ] Реализовать reconnect policy:
   - [ ] экспоненциальный/ступенчатый backoff;
   - [ ] лимит попыток;
@@ -266,16 +348,17 @@ flowchart LR
 
 #### 5.4 Verification gates этапа 5
 - [ ] BT app собирается отдельно (`ufbt build`) без влияния на UART target.
+- [ ] Зафиксирован окончательный `stack_size` для BT app в `apps/bt/application.fam` (подтверждён отсутствием stack overflow под BLE нагрузкой).
 - [ ] Проверен сценарий cold start:
-  - [ ] scan -> select device -> connect -> sync -> live.
+  - [ ] scan -> select device -> connect -> (core) SYNC -> LIVE.
 - [ ] Проверен messaging сценарий:
   - [ ] отправка текста в mesh;
   - [ ] приём входящего текста;
   - [ ] корректное обновление roster/history.
 - [ ] Проверен disconnect/reconnect:
-  - [ ] обрыв линка переводит в `reconnecting`;
-  - [ ] восстановление соединения возвращает в `connected_live`;
-  - [ ] при исчерпании retries состояние `error` и ясный статус для пользователя.
+  - [ ] обрыв линка переводит transport в `reconnecting`, core — в `IDLE`;
+  - [ ] восстановление соединения возвращает transport в `connected`, core повторно запускает SYNC и доходит до LIVE;
+  - [ ] при исчерпании retries transport `error` и ясный статус для пользователя.
 
 #### 5.5 Definition of Done этапа 5
 - BT app поддерживает стабильный рабочий цикл: `scan -> connect -> sync -> tx/rx -> reconnect`.
@@ -308,6 +391,9 @@ flowchart LR
 - [ ] `CONTRIBUTING.md`:
   - [ ] как запускать проверки для двух app targets;
   - [ ] обязательный smoke checklist перед PR.
+- [ ] `docs/protocol.md`:
+  - [ ] пометить, что UART использует framing `0x94 0xC3 + len`, а BLE — «голый» protobuf через GATT characteristics;
+  - [ ] описать MTU policy и heartbeat policy по транспортам.
 
 #### 6.2 Сборка и CI-гейты
 - [ ] Локально: отдельные успешные сборки для `uart` и `bt`.
