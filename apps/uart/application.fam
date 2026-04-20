@@ -13,6 +13,9 @@ App(
     fap_description="Meshtastic client (UART serial)",
     sources=["*.c"],
     cdefines=["FM_APP_UART=1"],
+    # Link order: flipmesh_core must come before meshtastic_api so UND
+    # meshtastic_*_msg from core pulls mesh.pb.o from the archive (GNU ld
+    # does not rescan earlier libs).
     fap_private_libs=[
         Lib(
             sources=["*.c"],
@@ -20,14 +23,14 @@ App(
             cflags=[],
         ),
         Lib(
-            sources=["meshtastic/*.pb.c"],
-            name="meshtastic_api",
+            sources=["*.c"],
+            name="flipmesh_core",
+            cincludes=["../../core", "../../core/lib/meshtastic_api"],
             cflags=[],
         ),
         Lib(
-            sources=["*.c"],
-            name="flipmesh_core",
-            cincludes=["../../core"],
+            sources=["meshtastic/*.pb.c"],
+            name="meshtastic_api",
             cflags=[],
         ),
     ],

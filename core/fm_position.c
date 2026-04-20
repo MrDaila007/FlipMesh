@@ -2,7 +2,25 @@
 // Copyright (c) 2025 DanilaE
 
 #include "fm_position.h"
+#include <stdint.h>
 #include <stdio.h>
+
+/* Absolute value as uint32_t (handles INT32_MIN). */
+static uint32_t abs32_u(int32_t v) {
+    uint32_t u = (uint32_t)v;
+    if((int32_t)u < 0) u = (uint32_t)(-(int64_t)(int32_t)u);
+    return u;
+}
+
+/* (a * mul) / div via uint64 — uses __aeabi_uldivmod (exported for FAPs), not __aeabi_ldivmod. */
+static int32_t imul_u64_div(int32_t a, uint32_t mul, uint32_t div) {
+    if(div == 0) return 0;
+    uint64_t prod = (uint64_t)abs32_u(a) * mul;
+    uint64_t q    = prod / div;
+    if(q > (uint64_t)INT32_MAX) q = (uint64_t)INT32_MAX;
+    int32_t r = (int32_t)q;
+    return (a < 0) ? -r : r;
+}
 
 void position_format_coords(int32_t lat_i, int32_t lon_i, char* buf, size_t len) {
     /* lat_i and lon_i are degrees × 1e7 */
@@ -49,9 +67,9 @@ uint32_t position_calc_distance_m(int32_t lat1, int32_t lon1,
     /* Convert 1e-7 degree units to meters:
        dlat_m = dlat × 111319 / 1e7 = dlat × 11132 / 1e6
        dlon_m = dlon × 111319 × cos / 1e7 / 1000 */
-    int32_t dlat_m = (int32_t)((int64_t)dlat * 11132 / 1000000);
-    int32_t dlon_m = (int32_t)((int64_t)dlon * 11132 / 1000000);
-    dlon_m = (int32_t)((int64_t)dlon_m * cos_val / 1000);
+    int32_t dlat_m = imul_u64_div(dlat, 11132u, 1000000u);
+    int32_t dlon_m = imul_u64_div(dlon, 11132u, 1000000u);
+    dlon_m         = imul_u64_div(dlon_m, cos_val, 1000u);
 
     /* Integer sqrt via Newton's method */
     uint32_t d2 = (uint32_t)(dlat_m * dlat_m) + (uint32_t)(dlon_m * dlon_m);
