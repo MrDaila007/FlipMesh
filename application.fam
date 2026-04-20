@@ -1,0 +1,26 @@
+App(
+    appid="flipmesh",
+    name="FlipMesh",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="flipmesh_app_entry",
+    requires=["gui"],
+    stack_size=10 * 1024,
+    fap_icon="icons/flipmesh_10.png",
+    fap_category="Tools",
+    fap_author="DanilaE",
+    fap_weburl="https://github.com/DanilaE/FlipMesh",
+    fap_version="1.0",
+    fap_description="Meshtastic mesh network client for Flipper Zero",
+    fap_private_libs=[
+        PrivateLib(
+            sources=["lib/nanopb/*.c"],
+            name="nanopb",
+            cflags=["-DPB_ENABLE_MALLOC=0", "-DPB_WITHOUT_64BIT=0"],
+        ),
+        PrivateLib(
+            sources=["lib/meshtastic_api/meshtastic/*.pb.c"],
+            name="meshtastic_api",
+            cflags=[],
+        ),
+    ],
+)
