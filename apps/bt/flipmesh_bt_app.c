@@ -43,7 +43,8 @@ int32_t flipmesh_bt_app_entry(void* p) {
     fm_ch_init(app);
     settings_load(app);
 
-    snprintf(app->status_line, sizeof(app->status_line), "BLE: see Settings");
+    snprintf(app->status_line, sizeof(app->status_line),
+        "BLE build is a stub — use FlipMesh UART");
     fm_bt_transport_init(app);
 
     app->gui = furi_record_open(RECORD_GUI);

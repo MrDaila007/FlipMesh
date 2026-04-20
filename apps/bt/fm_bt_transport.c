@@ -26,13 +26,14 @@ void fm_bt_transport_init(FlipMeshApp* app) {
     app->bt_link_ready = false;
     app->ble_auto_reconnect = true;
     app->transport_heartbeat_allowed = false;
-    snprintf(app->ble_status, sizeof(app->ble_status), "No central stack");
+    /* Stock FW: no public BLE Central API for external FAPs. */
+    snprintf(app->ble_status, sizeof(app->ble_status), "Use FlipMesh UART");
 }
 
 void fm_bt_scan_action(FlipMeshApp* app) {
     if(!app) return;
-    snprintf(app->ble_status, sizeof(app->ble_status), "Scan N/A");
-    fm_log(app, "BLE scan not supported (see docs/ble-feasibility-report.md)");
+    snprintf(app->ble_status, sizeof(app->ble_status), "No scan (stock FW)");
+    fm_log(app, "BLE scan needs FW API (docs/ble-feasibility-report.md)");
     if(app->vp) view_port_update(app->vp);
 }
 
@@ -42,8 +43,8 @@ void fm_bt_connect_action(FlipMeshApp* app) {
         fm_proto_transport_set_ready(app, false);
         fm_log(app, "BLE disconnected (stub)");
     } else {
-        fm_log(app, "BLE connect unavailable on stock firmware");
-        snprintf(app->ble_status, sizeof(app->ble_status), "Unavailable");
+        fm_log(app, "BLE link needs FW API (stock has no GATT client for FAPs)");
+        snprintf(app->ble_status, sizeof(app->ble_status), "No link (stock FW)");
     }
     if(app->vp) view_port_update(app->vp);
 }
