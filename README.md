@@ -36,6 +36,20 @@ ufbt build          # build only — produces .fap in .ufbt/build/
 ufbt launch         # build and deploy to connected Flipper Zero
 ```
 
+CI runs automatically on every push and pull request via GitHub Actions. The built `.fap` is uploaded as an artifact on each successful build.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/hardware-setup.md](docs/hardware-setup.md) | Wiring diagram, tested hardware, Meshtastic config, troubleshooting |
+| [docs/protocol.md](docs/protocol.md) | Meshtastic serial framing, protobuf message types, config sync sequence |
+| [docs/architecture.md](docs/architecture.md) | Threading model, data flow, module responsibilities, memory constraints |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up the dev environment, code style, commit format, and PR process.
+
 ## Navigation
 
 | Button       | Action                                     |

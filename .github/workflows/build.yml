@@ -1,0 +1,58 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build FAP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with uFBT
+        uses: flipperdevices/flipperzero-ufbt-action@v0.1
+        id: build-app
+        with:
+          app-dir: .
+          sdk-channel: release
+
+      - name: Upload FAP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flipmesh-fap
+          path: ${{ steps.build-app.outputs.fap-name }}
+          retention-days: 30
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check SPDX headers
+        run: |
+          missing=0
+          for f in *.c *.h; do
+            [ -f "$f" ] || continue
+            if ! grep -q "SPDX-License-Identifier" "$f"; then
+              echo "Missing SPDX header: $f"
+              missing=$((missing + 1))
+            fi
+          done
+          exit $missing
+
+      - name: Check for trailing whitespace
+        run: |
+          if grep -rn " $" --include="*.c" --include="*.h" .; then
+            echo "Trailing whitespace found"
+            exit 1
+          fi
+          echo "No trailing whitespace"

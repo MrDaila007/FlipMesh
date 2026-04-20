@@ -1,4 +1,18 @@
+# uFBT build output
 .ufbt/
 dist/
+
+# Python
 *.pyc
 __pycache__/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
