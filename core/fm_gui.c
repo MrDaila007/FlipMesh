@@ -668,6 +668,19 @@ static void render_signal(Canvas* canvas, FlipMeshApp* app) {
     }
 }
 
+/* Visible settings rows (FontSecondary ~10px; header uses y < 24). */
+#define FM_SET_ROWS_VISIBLE 4
+
+static uint8_t settings_first_visible_row(const FlipMeshApp* app) {
+    if(FM_SET_COUNT <= FM_SET_ROWS_VISIBLE) return 0;
+    uint8_t first = (app->set_cursor >= FM_SET_ROWS_VISIBLE) ?
+                        (uint8_t)(app->set_cursor + 1u - FM_SET_ROWS_VISIBLE) :
+                        0u;
+    uint8_t max_first = (uint8_t)(FM_SET_COUNT - FM_SET_ROWS_VISIBLE);
+    if(first > max_first) first = max_first;
+    return first;
+}
+
 static void render_logs(Canvas* canvas, FlipMeshApp* app) {
     draw_statusbar(canvas, app);
     draw_nav_header(canvas, app, app->log_frozen ? "Logs [PAUSE]" : "Logs");
@@ -689,6 +702,10 @@ static void render_logs(Canvas* canvas, FlipMeshApp* app) {
 static void render_settings(Canvas* canvas, FlipMeshApp* app) {
     draw_statusbar(canvas, app);
     draw_nav_header(canvas, app, "Settings");
+
+    if(app->set_cursor >= FM_SET_COUNT) {
+        app->set_cursor = (uint8_t)(FM_SET_COUNT ? FM_SET_COUNT - 1u : 0u);
+    }
 
     canvas_set_font(canvas, FontSecondary);
 
@@ -776,9 +793,11 @@ static void render_settings(Canvas* canvas, FlipMeshApp* app) {
     rows[FM_SET_TIMESTAMPS].label = "Timestamps";
 #endif
 
-    int y = 24;
-    for(uint8_t i = 0; i < FM_SET_COUNT && y < 64; i++) {
-        bool sel = (i == app->set_cursor);
+    uint8_t first = settings_first_visible_row(app);
+    uint8_t shown = 0;
+    for(uint8_t i = first; i < FM_SET_COUNT && shown < FM_SET_ROWS_VISIBLE; i++, shown++) {
+        int y = 24 + shown * 10;
+        bool sel    = (i == app->set_cursor);
         bool editing = sel && app->set_editing;
 
         if(sel) {
@@ -801,7 +820,6 @@ static void render_settings(Canvas* canvas, FlipMeshApp* app) {
         }
 
         canvas_set_color(canvas, ColorBlack);
-        y += 10;
     }
 }
 
@@ -1094,14 +1112,20 @@ void input_cb(InputEvent* event, void* ctx) {
         switch(event->key) {
         case InputKeyLeft:
             if(app->set_editing) {
+                /* setting_change → UART reopen / fm_log / preview tone — must not
+                 * run with app->lock held (deadlock vs fm_log, RX thread starvation). */
+                furi_mutex_release(app->lock);
                 setting_change(app, -1);
+                furi_mutex_acquire(app->lock, FuriWaitForever);
             } else {
                 app->page = (uint8_t)((FM_PAGE_COUNT + app->page - 1) % FM_PAGE_COUNT);
             }
             break;
         case InputKeyRight:
             if(app->set_editing) {
+                furi_mutex_release(app->lock);
                 setting_change(app, 1);
+                furi_mutex_acquire(app->lock, FuriWaitForever);
             } else {
                 app->page = (uint8_t)((app->page + 1) % FM_PAGE_COUNT);
             }
