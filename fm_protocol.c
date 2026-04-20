@@ -2,6 +2,7 @@
 #include "fm_history.h"
 #include "fm_notify.h"
 #include "fm_roster.h"
+#include "fm_uart.h"
 
 #define TAG "flipmesh"
 
@@ -76,7 +77,7 @@ void fm_proto_heartbeat(FlipMeshApp* app) {
     if(!app || !app->serial) return;
     meshtastic_ToRadio to    = meshtastic_ToRadio_init_default;
     to.which_payload_variant = meshtastic_ToRadio_heartbeat_tag;
-    to.payload_variant.heartbeat.nonce = ++app->hb_nonce;
+    to.heartbeat.nonce = ++app->hb_nonce;
 
     uint8_t buf[32];
     pb_ostream_t os = pb_ostream_from_buffer(buf, sizeof(buf));
@@ -94,7 +95,7 @@ void fm_proto_sync(FlipMeshApp* app) {
 
     meshtastic_ToRadio to    = meshtastic_ToRadio_init_default;
     to.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
-    to.payload_variant.want_config_id = app->sync_id;
+    to.want_config_id = app->sync_id;
 
     uint8_t buf[32];
     pb_ostream_t os = pb_ostream_from_buffer(buf, sizeof(buf));
@@ -111,7 +112,7 @@ void fm_proto_send_text(FlipMeshApp* app, const char* text, uint32_t to_node) {
     meshtastic_ToRadio to    = meshtastic_ToRadio_init_default;
     to.which_payload_variant = meshtastic_ToRadio_packet_tag;
 
-    meshtastic_MeshPacket* p = &to.payload_variant.packet;
+    meshtastic_MeshPacket* p = &to.packet;
     p->to        = to_node;
     p->channel   = app->active_ch;
     p->id        = (uint32_t)furi_hal_random_get();
@@ -122,7 +123,7 @@ void fm_proto_send_text(FlipMeshApp* app, const char* text, uint32_t to_node) {
     app->echo_head = (app->echo_head + 1) % FM_ECHO_RING;
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    meshtastic_Data* d       = &p->payload_variant.decoded;
+    meshtastic_Data* d       = &p->decoded;
     d->portnum               = meshtastic_PortNum_TEXT_MESSAGE_APP;
     d->want_response         = false;
 
@@ -221,7 +222,7 @@ static void handle_position(FlipMeshApp* app, const meshtastic_MeshPacket* p,
 static void decode_packet(FlipMeshApp* app, const meshtastic_MeshPacket* p) {
     if(p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) return;
 
-    const meshtastic_Data* d = &p->payload_variant.decoded;
+    const meshtastic_Data* d = &p->decoded;
     const uint8_t* pl        = d->payload.bytes;
     size_t         pl_len    = d->payload.size;
 
@@ -260,12 +261,11 @@ static void decode_fromradio(FlipMeshApp* app, const uint8_t* frame, size_t len)
 
     switch(from.which_payload_variant) {
     case meshtastic_FromRadio_packet_tag: {
-        const meshtastic_MeshPacket* p = &from.payload_variant.packet;
+        const meshtastic_MeshPacket* p = &from.packet;
         if(is_echo(app, p->id)) break;
 
         app->last_from = p->from;
         app->last_to   = p->to;
-        app->last_rx_id   = p->id;
         if(p->rx_rssi != 0 || p->rx_snr != 0) {
             app->last_rssi = p->rx_rssi;
             app->last_snr  = p->rx_snr;
@@ -280,7 +280,7 @@ static void decode_fromradio(FlipMeshApp* app, const uint8_t* frame, size_t len)
     }
 
     case meshtastic_FromRadio_my_info_tag: {
-        const meshtastic_MyNodeInfo* info = &from.payload_variant.my_info;
+        const meshtastic_MyNodeInfo* info = &from.my_info;
         app->self_id = info->my_node_num;
         fm_log(app, "My ID: %08lX", (unsigned long)app->self_id);
         break;
@@ -288,13 +288,13 @@ static void decode_fromradio(FlipMeshApp* app, const uint8_t* frame, size_t len)
 
     case meshtastic_FromRadio_node_info_tag: {
         furi_mutex_acquire(app->lock, FuriWaitForever);
-        fm_node_update_info(app, &from.payload_variant.node_info);
+        fm_node_update_info(app, &from.node_info);
         furi_mutex_release(app->lock);
         break;
     }
 
     case meshtastic_FromRadio_config_complete_id_tag: {
-        uint32_t rcvd = from.payload_variant.config_complete_id;
+        uint32_t rcvd = from.config_complete_id;
         if(rcvd == app->sync_id) {
             app->conn = FM_CONN_LIVE;
             fm_status(app, "Connected");
@@ -307,7 +307,7 @@ static void decode_fromradio(FlipMeshApp* app, const uint8_t* frame, size_t len)
     }
 
     case meshtastic_FromRadio_metadata_tag: {
-        const meshtastic_DeviceMetadata* meta = &from.payload_variant.metadata;
+        const meshtastic_DeviceMetadata* meta = &from.metadata;
         fm_log(app, "FW: %s", meta->firmware_version);
         break;
     }

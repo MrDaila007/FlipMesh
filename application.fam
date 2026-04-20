@@ -12,13 +12,13 @@ App(
     fap_version="1.0",
     fap_description="Meshtastic mesh network client for Flipper Zero",
     fap_private_libs=[
-        PrivateLib(
-            sources=["lib/nanopb/*.c"],
+        Lib(
+            sources=["*.c"],
             name="nanopb",
-            cflags=["-DPB_ENABLE_MALLOC=0", "-DPB_WITHOUT_64BIT=0"],
+            cflags=[],
         ),
-        PrivateLib(
-            sources=["lib/meshtastic_api/meshtastic/*.pb.c"],
+        Lib(
+            sources=["meshtastic/*.pb.c"],
             name="meshtastic_api",
             cflags=[],
         ),

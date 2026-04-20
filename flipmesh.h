@@ -28,27 +28,27 @@
 
 /* ── Display layout ──────────────────────────────────────────────────────── */
 #define FM_LOG_ROWS   20
-#define FM_FM_LOG_COLS   64
+#define FM_LOG_COLS   64
 
 /* ── Pages ───────────────────────────────────────────────────────────────── */
-#define FM_FM_PAGE_MESSAGES  0
-#define FM_FM_PAGE_NODES     1
-#define FM_FM_PAGE_POSITION  2
-#define FM_FM_PAGE_STATS     3
-#define FM_FM_PAGE_SIGNAL    4
-#define FM_FM_PAGE_LOGS      5
-#define FM_FM_PAGE_SETTINGS  6
-#define FM_FM_PAGE_COUNT     7
+#define FM_PAGE_MESSAGES  0
+#define FM_PAGE_NODES     1
+#define FM_PAGE_POSITION  2
+#define FM_PAGE_STATS     3
+#define FM_PAGE_SIGNAL    4
+#define FM_PAGE_LOGS      5
+#define FM_PAGE_SETTINGS  6
+#define FM_PAGE_COUNT     7
 
 /* ── Limits ──────────────────────────────────────────────────────────────── */
-#define FM_FM_MSG_HISTORY   16
-#define FM_FM_MSG_TEXT_MAX  200
+#define FM_MSG_HISTORY   16
+#define FM_MSG_TEXT_MAX  200
 #define FM_ROSTER_MAX    32
 #define FM_ECHO_RING     32
-#define FM_FM_MAX_CHANNELS  8
+#define FM_MAX_CHANNELS  8
 
 /* ── Paths ───────────────────────────────────────────────────────────────── */
-#define FM_FM_SETTINGS_PATH "/ext/flipmesh/settings.cfg"
+#define FM_SETTINGS_PATH "/ext/flipmesh/settings.cfg"
 
 /* ── Tones (notification sounds) ─────────────────────────────────────────── */
 typedef enum {
@@ -78,7 +78,7 @@ typedef enum {
 typedef enum {
     FM_LMH_SCROLL = 0,
     FM_LMH_WRAP,
-    FM_FM_LMH_COUNT,
+    FM_LMH_COUNT,
 } FMLongMsg;
 
 /* ── Connection state ────────────────────────────────────────────────────── */
@@ -150,15 +150,15 @@ typedef struct {
 } FMRoster;
 
 typedef struct {
-    char     text[FM_FM_MSG_TEXT_MAX];
+    char     text[FM_MSG_TEXT_MAX];
     uint32_t from;
     uint32_t to;
     bool     outgoing;
     uint32_t ts;            /* seconds since boot */
-} FMFMMessage;
+} FMMessage;
 
 typedef struct {
-    FMFMMessage buf[FM_FM_MSG_HISTORY];
+    FMMessage buf[FM_MSG_HISTORY];
     uint8_t   head;
     uint8_t   count;
 } FMHistory;
@@ -204,9 +204,9 @@ typedef struct {
     uint32_t sync_id;
 
     /* Logging */
-    char    log[FM_LOG_ROWS][FM_FM_LOG_COLS];
+    char    log[FM_LOG_ROWS][FM_LOG_COLS];
     uint8_t log_head;
-    char    status_line[FM_FM_LOG_COLS];
+    char    status_line[FM_LOG_COLS];
 
     /* Data */
     FMHistory history;

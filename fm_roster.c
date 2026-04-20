@@ -37,23 +37,23 @@ void fm_node_update_info(FlipMeshApp* app, const meshtastic_NodeInfo* info) {
 
     e->last_heard = info->last_heard;
     e->snr        = info->snr;
-    e->hops_away  = info->hops_away;
+    e->hops       = (uint8_t)info->hops_away;
     e->via_mqtt   = info->via_mqtt;
 
     if(info->has_position && info->position.has_latitude_i && info->position.has_longitude_i) {
-        e->has_position  = true;
-        e->latitude_i    = info->position.lat_i;
-        e->longitude_i   = info->position.lon_i;
-        e->pos_timestamp = info->position.time;
+        e->has_gps  = true;
+        e->lat_i    = info->position.latitude_i;
+        e->lon_i    = info->position.longitude_i;
+        e->gps_time = info->position.time;
     }
 
     if(info->has_device_metrics) {
-        e->battery_pct = (uint8_t)info->device_metrics.battery_pct;
-        e->voltage       = info->device_metrics.voltage;
-        e->ch_util       = info->device_metrics.channel_utilization;
-        e->air_util      = info->device_metrics.air_util_tx;
-        e->uptime_seconds = info->device_metrics.uptime_s;
-        e->has_telemetry = true;
+        e->battery_pct = (uint8_t)info->device_metrics.battery_level;
+        e->voltage     = info->device_metrics.voltage;
+        e->ch_util     = info->device_metrics.channel_utilization;
+        e->air_util    = info->device_metrics.air_util_tx;
+        e->uptime_s    = info->device_metrics.uptime_seconds;
+        e->has_metrics = true;
     }
 }
 
@@ -75,29 +75,29 @@ void fm_node_update_metrics(FlipMeshApp* app, uint32_t node_id,
     uint32_t battery, float voltage, float ch_util, float air_util, uint32_t uptime) {
     FMNode* e     = fm_node_get(app, node_id);
     e->battery_pct = (uint8_t)battery;
-    e->voltage       = voltage;
-    e->ch_util       = ch_util;
-    e->air_util      = air_util;
-    e->uptime_seconds = uptime;
-    e->has_telemetry = true;
+    e->voltage     = voltage;
+    e->ch_util     = ch_util;
+    e->air_util    = air_util;
+    e->uptime_s    = uptime;
+    e->has_metrics = true;
 }
 
 void fm_node_update_env(FlipMeshApp* app, uint32_t node_id,
     float temp, float humidity, float pressure) {
     FMNode* e    = fm_node_get(app, node_id);
-    e->temperature  = temp;
-    e->humidity     = humidity;
-    e->pressure     = pressure;
-    e->has_env_metrics = true;
+    e->temp_c     = temp;
+    e->humidity   = humidity;
+    e->pressure_hpa = pressure;
+    e->has_env    = true;
 }
 
 void fm_node_update_pos(FlipMeshApp* app, uint32_t node_id,
     const meshtastic_Position* pos) {
     FMNode* e    = fm_node_get(app, node_id);
-    e->has_position = true;
-    e->latitude_i   = pos->latitude_i;
-    e->longitude_i  = pos->longitude_i;
-    e->pos_timestamp = pos->time;
+    e->has_gps  = true;
+    e->lat_i    = pos->latitude_i;
+    e->lon_i    = pos->longitude_i;
+    e->gps_time = pos->time;
 }
 
 void fm_node_mark_dm(FlipMeshApp* app, uint32_t node_id) {
@@ -109,7 +109,7 @@ void fm_node_mark_dm(FlipMeshApp* app, uint32_t node_id) {
     }
     /* Node not yet in roster — create it so the DM flag is preserved. */
     FMNode* e = fm_node_get(app, node_id);
-    e->has_new_dm = true;
+    e->unread_dm = true;
 }
 
 void fm_node_fmt_id(uint32_t node_id, char* buf, size_t len) {

@@ -8,7 +8,7 @@ typedef struct {
     uint8_t role;       /* 0=disabled 1=primary 2=secondary */
 } FMChanMeta;
 
-#define FM_CHAN_META_MAX FM_FM_MAX_CHANNELS
+#define FM_CHAN_META_MAX FM_MAX_CHANNELS
 
 void        fm_ch_init(FlipMeshApp* app);
 void        fm_ch_next(FlipMeshApp* app);

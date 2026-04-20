@@ -414,13 +414,13 @@ static void render_nodes(Canvas* canvas, FlipMeshApp* app) {
         canvas_draw_str(canvas, 2, y, buf);
         y += 9;
 
-        if(e->hops_away) {
-            snprintf(buf, sizeof(buf), "Hops: %u%s", e->hops_away, e->via_mqtt ? " (MQTT)" : "");
+        if(e->hops) {
+            snprintf(buf, sizeof(buf), "Hops: %u%s", e->hops, e->via_mqtt ? " (MQTT)" : "");
             canvas_draw_str(canvas, 2, y, buf);
             y += 9;
         }
 
-        if(e->has_telemetry) {
+        if(e->has_metrics) {
             snprintf(buf, sizeof(buf), "Bat: %u%% %.2fV", e->battery_pct, (double)e->voltage);
             canvas_draw_str(canvas, 2, y, buf);
             y += 9;
@@ -429,9 +429,9 @@ static void render_nodes(Canvas* canvas, FlipMeshApp* app) {
                          (double)e->ch_util, (double)e->air_util);
                 canvas_draw_str(canvas, 2, y, buf);
             }
-        } else if(e->has_env_metrics) {
+        } else if(e->has_env) {
             snprintf(buf, sizeof(buf), "%.1fC %.0f%% %.0fhPa",
-                     (double)e->temperature, (double)e->humidity, (double)e->pressure);
+                     (double)e->temp_c, (double)e->humidity, (double)e->pressure_hpa);
             canvas_draw_str(canvas, 2, y, buf);
         } else {
             canvas_draw_str(canvas, 2, y, "No telemetry");
@@ -464,7 +464,7 @@ static void render_nodes(Canvas* canvas, FlipMeshApp* app) {
         }
 
         /* DM badge */
-        if(e->has_new_dm) canvas_draw_str(canvas, 1, y, "!");
+        if(e->unread_dm) canvas_draw_str(canvas, 1, y, "!");
 
         /* Display name */
         char name[8];
@@ -476,7 +476,7 @@ static void render_nodes(Canvas* canvas, FlipMeshApp* app) {
 
         /* Hops */
         char hops[6];
-        if(e->hops_away > 0) snprintf(hops, sizeof(hops), "%uh", e->hops_away);
+        if(e->hops > 0) snprintf(hops, sizeof(hops), "%uh", e->hops);
         else snprintf(hops, sizeof(hops), "dir");
         canvas_draw_str(canvas, 68, y, hops);
 
@@ -529,7 +529,7 @@ static void render_position(Canvas* canvas, FlipMeshApp* app) {
         fm_node_display(e, name, sizeof(name));
 
         char coord[32];
-        position_format_coords(e->latitude_i, e->longitude_i, coord, sizeof(coord));
+        position_format_coords(e->lat_i, e->lon_i, coord, sizeof(coord));
 
         canvas_draw_str(canvas, 2, y, name);
         draw_str_ellipsis(canvas, 28, y, 98, coord);
@@ -537,7 +537,7 @@ static void render_position(Canvas* canvas, FlipMeshApp* app) {
 
         if(i != pos_nodes[0]) {
             uint32_t dist = position_calc_distance_m(ref_lat, ref_lon,
-                                                      e->latitude_i, e->longitude_i);
+                                                      e->lat_i, e->lon_i);
             char distbuf[12];
             position_format_distance(dist, distbuf, sizeof(distbuf));
             char distline[24];
@@ -730,12 +730,12 @@ static void setting_change(FlipMeshApp* app, int dir) {
     case FM_SET_UART:
         app->uart_id = (app->uart_id == FuriHalSerialIdUsart)
             ? FuriHalSerialIdLpuart : FuriHalSerialIdUsart;
-        uart_reopen(app, app->uart_id, app->baud);
+        fm_uart_reopen(app, app->uart_id, app->baud);
         break;
     case FM_SET_BAUD: {
         uint8_t idx = (baud_to_idx(app->baud) + BAUD_COUNT + (uint8_t)dir) % BAUD_COUNT;
         app->baud = baud_options[idx];
-        uart_reopen(app, app->uart_id, app->baud);
+        fm_uart_reopen(app, app->uart_id, app->baud);
         break;
     }
     case FM_SET_VIBRO:
@@ -778,7 +778,7 @@ static void setting_change(FlipMeshApp* app, int dir) {
         if(v < 0) v = 2;
         if(v > 2) v = 0;
         app->hb_idx = (uint8_t)v;
-        heartbeat_start(app);
+        fm_hb_start(app);
         break;
     }
     case FM_SET_CHANNELS: {
@@ -1015,9 +1015,9 @@ uint32_t kb_back_callback(void* ctx) {
     return VIEW_NONE;
 }
 
-void text_input_callback(void* ctx, const char* text) {
+void text_input_callback(void* ctx) {
     FlipMeshApp* app = (FlipMeshApp*)ctx;
-    if(!app || !text || text[0] == '\0') return;
+    if(!app || app->kb_buf[0] == '\0') return;
 
     uint32_t dest = 0xFFFFFFFF;
     if(app->page == FM_PAGE_NODES &&
@@ -1026,5 +1026,5 @@ void text_input_callback(void* ctx, const char* text) {
         dest = app->roster.nodes[app->roster.sel].node_id;
     }
 
-    fm_proto_send_text(app, text, dest);
+    fm_proto_send_text(app, app->kb_buf, dest);
 }

@@ -20,7 +20,7 @@ static void heartbeat_timer_cb(void* ctx) {
     fm_proto_heartbeat(app);
 }
 
-void fm_fm_uart_open(FlipMeshApp* app) {
+void fm_uart_open(FlipMeshApp* app) {
     if(!app) return;
     fm_uart_close(app);
     app->serial = furi_hal_serial_control_acquire(app->uart_id);
@@ -36,7 +36,7 @@ void fm_fm_uart_open(FlipMeshApp* app) {
     fm_status(app, s);
 }
 
-void fm_fm_uart_close(FlipMeshApp* app) {
+void fm_uart_close(FlipMeshApp* app) {
     if(!app) return;
     fm_hb_stop(app);
     if(app->serial) {
@@ -47,7 +47,7 @@ void fm_fm_uart_close(FlipMeshApp* app) {
     }
 }
 
-void fm_fm_uart_reopen(FlipMeshApp* app, FuriHalSerialId new_id, uint32_t new_baud) {
+void fm_uart_reopen(FlipMeshApp* app, FuriHalSerialId new_id, uint32_t new_baud) {
     if(!app) return;
     app->uart_id = new_id;
     app->baud = new_baud;

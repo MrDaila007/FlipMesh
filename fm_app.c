@@ -69,7 +69,7 @@ int32_t flipmesh_app_entry(void* p) {
             app->kb_vd = view_dispatcher_alloc();
             app->kb_input    = text_input_alloc();
 
-            text_input_set_header_text(app->kb_input, "Send FMMessage:");
+            text_input_set_header_text(app->kb_input, "Send Message:");
             text_input_set_result_callback(
                 app->kb_input,
                 text_input_callback,

@@ -26,7 +26,7 @@ void fm_ch_next(FlipMeshApp* app) {
 }
 
 void fm_ch_set(FlipMeshApp* app, uint8_t idx) {
-    if(!app || idx >= FM_FM_MAX_CHANNELS) return;
+    if(!app || idx >= FM_MAX_CHANNELS) return;
     app->active_ch = idx;
     if(idx >= app->num_ch) app->num_ch = idx + 1;
 }
