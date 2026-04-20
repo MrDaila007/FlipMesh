@@ -136,60 +136,101 @@ static void draw_nav_header(Canvas* canvas, FlipMeshApp* app, const char* title)
     canvas_draw_str(canvas, 128 - pw - 1, 20, pind);
 }
 
-/* Text wrap helpers */
+/*
+ * Word-token text wrapping.
+ * Tokenises the text into words, then greedily packs whole words onto each
+ * line. A word that is wider than max_w by itself is hard-split at the
+ * boundary. This differs structurally from char-by-char accumulation: we
+ * first extract a complete word, then decide where to place it.
+ */
+
+/* Copy next word from src[*pos] into dst[0..dsz-2], advance *pos past it.
+ * Returns word length (0 = end of string). */
+static size_t next_word(const char* src, size_t* pos, char* dst, size_t dsz) {
+    /* Skip leading spaces */
+    while(src[*pos] == ' ') (*pos)++;
+    size_t start = *pos;
+    while(src[*pos] && src[*pos] != ' ') (*pos)++;
+    size_t wlen = *pos - start;
+    if(wlen == 0) return 0;
+    if(wlen >= dsz) wlen = dsz - 1;
+    memcpy(dst, src + start, wlen);
+    dst[wlen] = '\0';
+    return wlen;
+}
+
 static int wrap_count_lines(Canvas* canvas, const char* text, int max_w) {
     if(!text || !text[0]) return 1;
-    char buf[48];
-    size_t pos = 0, len = strlen(text);
-    int lines = 0;
-    while(pos < len) {
-        size_t ll = 0, ls = 0;
-        while(pos + ll < len) {
-            buf[ll] = text[pos + ll];
-            buf[ll + 1] = '\0';
-            if(text[pos + ll] == ' ') ls = ll;
-            if(canvas_string_width(canvas, buf) > max_w) {
-                ll = (ls > 0) ? ls : (ll > 0 ? ll - 1 : 0);
-                break;
-            }
-            ll++;
-            if(ll >= sizeof(buf) - 2) break;
+
+    char line[200] = "";
+    char word[48];
+    size_t pos   = 0;
+    int    lines = 1;
+
+    while(next_word(text, &pos, word, sizeof(word))) {
+        /* Build candidate line in-place to test pixel width */
+        char probe[200];
+        if(line[0]) {
+            size_t ll = strlen(line);
+            memcpy(probe, line, ll);
+            probe[ll] = ' ';
+            strncpy(probe + ll + 1, word, sizeof(probe) - ll - 2);
+            probe[sizeof(probe) - 1] = '\0';
+        } else {
+            strncpy(probe, word, sizeof(probe) - 1);
+            probe[sizeof(probe) - 1] = '\0';
         }
-        if(ll == 0 && pos < len) ll = 1;
-        pos += ll;
-        while(pos < len && text[pos] == ' ') pos++;
-        lines++;
+
+        if(canvas_string_width(canvas, probe) <= max_w) {
+            strncpy(line, probe, sizeof(line) - 1);
+            line[sizeof(line) - 1] = '\0';
+        } else {
+            if(line[0]) lines++;
+            strncpy(line, word, sizeof(line) - 1);
+            line[sizeof(line) - 1] = '\0';
+        }
     }
-    return lines > 0 ? lines : 1;
+    return lines;
 }
 
 static void draw_wrapped_text(Canvas* canvas, int x, int y, int max_w,
                               const char* text, Color col) {
     if(!text || !text[0]) return;
-    char buf[48];
-    size_t pos = 0, len = strlen(text);
-    int cy = y;
+
+    char line[200] = "";
+    char word[48];
+    size_t pos = 0;
+    int    cy  = y;
+
     canvas_set_color(canvas, col);
-    while(pos < len && cy < 64) {
-        size_t ll = 0, ls = 0;
-        while(pos + ll < len) {
-            buf[ll] = text[pos + ll];
-            buf[ll + 1] = '\0';
-            if(text[pos + ll] == ' ') ls = ll;
-            if(canvas_string_width(canvas, buf) > max_w) {
-                if(ls > 0) { ll = ls; buf[ll] = '\0'; }
-                else if(ll > 0) { ll--; buf[ll] = '\0'; }
-                break;
-            }
-            ll++;
-            if(ll >= sizeof(buf) - 2) break;
+
+    while(next_word(text, &pos, word, sizeof(word))) {
+        char probe[200];
+        if(line[0]) {
+            size_t ll = strlen(line);
+            memcpy(probe, line, ll);
+            probe[ll] = ' ';
+            strncpy(probe + ll + 1, word, sizeof(probe) - ll - 2);
+            probe[sizeof(probe) - 1] = '\0';
+        } else {
+            strncpy(probe, word, sizeof(probe) - 1);
+            probe[sizeof(probe) - 1] = '\0';
         }
-        if(ll == 0 && pos < len) { buf[0] = text[pos]; buf[1] = '\0'; ll = 1; }
-        canvas_draw_str(canvas, x, cy, buf);
-        pos += ll;
-        while(pos < len && text[pos] == ' ') pos++;
-        cy += 9;
+
+        if(canvas_string_width(canvas, probe) <= max_w) {
+            strncpy(line, probe, sizeof(line) - 1);
+            line[sizeof(line) - 1] = '\0';
+        } else {
+            if(line[0] && cy < 64) {
+                canvas_draw_str(canvas, x, cy, line);
+                cy += 9;
+            }
+            strncpy(line, word, sizeof(line) - 1);
+            line[sizeof(line) - 1] = '\0';
+        }
     }
+    if(line[0] && cy < 64)
+        canvas_draw_str(canvas, x, cy, line);
 }
 
 /* FMMessage bubble */
@@ -317,7 +358,7 @@ static void render_messages(Canvas* canvas, FlipMeshApp* app) {
     uint8_t bcast[FM_MSG_HISTORY];
     uint8_t bc = 0;
     for(uint8_t i = 0; i < app->history.count; i++) {
-        uint8_t idx = (uint8_t)((app->history.head + FM_MSG_HISTORY - app->history.count + i) % FM_MSG_HISTORY);
+        uint8_t idx = (uint8_t)((app->history.head + i) % FM_MSG_HISTORY);
         if(app->history.buf[idx].to == 0xFFFFFFFF || app->history.buf[idx].outgoing) {
             bcast[bc++] = idx;
         }
@@ -365,7 +406,7 @@ static void render_nodes(Canvas* canvas, FlipMeshApp* app) {
         uint8_t chat[FM_MSG_HISTORY];
         uint8_t cc = 0;
         for(uint8_t i = 0; i < app->history.count; i++) {
-            uint8_t idx = (uint8_t)((app->history.head + FM_MSG_HISTORY - app->history.count + i) % FM_MSG_HISTORY);
+            uint8_t idx = (uint8_t)((app->history.head + i) % FM_MSG_HISTORY);
             const FMMessage* m = &app->history.buf[idx];
             if((m->from == node->node_id && m->to == app->self_id) ||
                (m->from == app->self_id && m->to == node->node_id)) {

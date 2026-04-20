@@ -9,13 +9,18 @@
 
 #define SETTINGS_VERSION 2
 
-static void write_line(File* f, const char* fmt, ...) {
-    char buf[64];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    storage_file_write(f, buf, strlen(buf));
+/* ── Save ─────────────────────────────────────────────────────────────────── */
+
+static void write_kv(File* f, const char* key, const char* val) {
+    char line[80];
+    size_t n = (size_t)snprintf(line, sizeof(line), "%s=%s\n", key, val);
+    storage_file_write(f, line, n);
+}
+
+static void write_kv_int(File* f, const char* key, int v) {
+    char val[12];
+    snprintf(val, sizeof(val), "%d", v);
+    write_kv(f, key, val);
 }
 
 void settings_save(FlipMeshApp* app) {
@@ -26,22 +31,60 @@ void settings_save(FlipMeshApp* app) {
 
     File* file = storage_file_alloc(storage);
     if(storage_file_open(file, FM_SETTINGS_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
-        write_line(file, "version=%d\n", SETTINGS_VERSION);
-        write_line(file, "uart_id=%d\n",    (int)app->uart_id);
-        write_line(file, "baud=%lu\n",      (unsigned long)app->baud);
-        write_line(file, "vibro=%d\n",      app->vib_on ? 1 : 0);
-        write_line(file, "led=%d\n",        app->led_on   ? 1 : 0);
-        write_line(file, "ringtone=%d\n",   (int)app->tone);
-        write_line(file, "scroll_speed=%d\n",app->scroll_spd);
-        write_line(file, "scroll_fps=%d\n", app->framerate);
-        write_line(file, "lmh_mode=%d\n",   (int)app->long_msg);
-        write_line(file, "hb_idx=%d\n",     (int)app->hb_idx);
-        write_line(file, "channels=%d\n",   (int)app->num_ch);
-        write_line(file, "timestamps=%d\n", app->show_ts ? 1 : 0);
+        write_kv_int(file, "version",      SETTINGS_VERSION);
+        write_kv_int(file, "uart_id",      (int)app->uart_id);
+        write_kv_int(file, "baud",         (int)app->baud);
+        write_kv_int(file, "vibro",        app->vib_on  ? 1 : 0);
+        write_kv_int(file, "led",          app->led_on  ? 1 : 0);
+        write_kv_int(file, "ringtone",     (int)app->tone);
+        write_kv_int(file, "scroll_speed", (int)app->scroll_spd);
+        write_kv_int(file, "scroll_fps",   (int)app->framerate);
+        write_kv_int(file, "lmh_mode",     (int)app->long_msg);
+        write_kv_int(file, "hb_idx",       (int)app->hb_idx);
+        write_kv_int(file, "channels",     (int)app->num_ch);
+        write_kv_int(file, "timestamps",   app->show_ts ? 1 : 0);
         storage_file_close(file);
     }
     storage_file_free(file);
     furi_record_close(RECORD_STORAGE);
+}
+
+/* ── Load ─────────────────────────────────────────────────────────────────── */
+
+/*
+ * Character-by-character FSM parser. Scans the buffer once, accumulating
+ * key and value token in-place. On newline, dispatches the pair.
+ * No strchr, no memcpy line extraction, no pointer arithmetic over lines.
+ */
+
+typedef enum { PS_KEY, PS_VAL, PS_DONE } ParsePhase;
+
+static void dispatch(FlipMeshApp* app, const char* key, const char* val) {
+    int v = atoi(val);
+    if(!strcmp(key, "uart_id")) {
+        app->uart_id = (v == 1) ? FuriHalSerialIdLpuart : FuriHalSerialIdUsart;
+    } else if(!strcmp(key, "baud")) {
+        if(v > 0) app->baud = (uint32_t)v;
+    } else if(!strcmp(key, "vibro")) {
+        app->vib_on = (v != 0);
+    } else if(!strcmp(key, "led")) {
+        app->led_on = (v != 0);
+    } else if(!strcmp(key, "ringtone")) {
+        if(v >= 0 && v < FM_TONE_COUNT) app->tone = (FMTone)v;
+    } else if(!strcmp(key, "scroll_speed")) {
+        if(v >= 1 && v <= 10) app->scroll_spd = (uint8_t)v;
+    } else if(!strcmp(key, "scroll_fps")) {
+        if(v >= 1 && v <= 10) app->framerate = (uint8_t)v;
+    } else if(!strcmp(key, "lmh_mode")) {
+        if(v >= 0 && v < FM_LMH_COUNT) app->long_msg = (FMLongMsg)v;
+    } else if(!strcmp(key, "hb_idx")) {
+        if(v >= 0 && v <= 2) app->hb_idx = (uint8_t)v;
+    } else if(!strcmp(key, "channels")) {
+        if(v >= 1 && v <= FM_MAX_CHANNELS) app->num_ch = (uint8_t)v;
+    } else if(!strcmp(key, "timestamps")) {
+        app->show_ts = (v != 0);
+    }
+    /* "version" key is accepted silently */
 }
 
 void settings_load(FlipMeshApp* app) {
@@ -56,62 +99,39 @@ void settings_load(FlipMeshApp* app) {
         return;
     }
 
-    char buffer[320];
-    uint16_t n = storage_file_read(file, buffer, sizeof(buffer) - 1);
-    buffer[n] = '\0';
+    char buf[384];
+    uint16_t n = storage_file_read(file, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
     storage_file_close(file);
     storage_file_free(file);
     furi_record_close(RECORD_STORAGE);
 
-    /* Check version; silently accept both v1 and v2 */
-    int file_ver = 1;
-    char* vpos = strstr(buffer, "version=");
-    if(vpos) file_ver = atoi(vpos + 8);
-    (void)file_ver; /* future migration hook */
+    /* Single-pass FSM: scan byte by byte, no line extraction */
+    char key[32];
+    char val[32];
+    uint8_t ki = 0, vi = 0;
+    ParsePhase phase = PS_KEY;
 
-    char* pos = buffer;
-    while(pos < buffer + n) {
-        char* eol = strchr(pos, '\n');
-        if(!eol) eol = buffer + n;
+    for(uint16_t i = 0; i <= n; i++) {
+        char c = buf[i]; /* '\0' at i==n acts as final line terminator */
 
-        size_t ll = (size_t)(eol - pos);
-        if(ll > 0 && ll < 128) {
-            char line[128];
-            memcpy(line, pos, ll);
-            line[ll] = '\0';
+        if(c == '\r') continue;
 
-            char* eq = strchr(line, '=');
-            if(eq) {
-                *eq = '\0';
-                const char* key = line;
-                int val = atoi(eq + 1);
+        if(c == '=' && phase == PS_KEY) {
+            key[ki] = '\0';
+            phase   = PS_VAL;
 
-                if(!strcmp(key, "uart_id")) {
-                    app->uart_id = (FuriHalSerialId)val;
-                } else if(!strcmp(key, "baud")) {
-                    app->baud = (uint32_t)val;
-                } else if(!strcmp(key, "vibro")) {
-                    app->vib_on = (val != 0);
-                } else if(!strcmp(key, "led")) {
-                    app->led_on = (val != 0);
-                } else if(!strcmp(key, "ringtone")) {
-                    if(val >= 0 && val < FM_TONE_COUNT)
-                        app->tone = (FMTone)val;
-                } else if(!strcmp(key, "scroll_speed")) {
-                    if(val >= 1 && val <= 10) app->scroll_spd = (uint8_t)val;
-                } else if(!strcmp(key, "scroll_fps")) {
-                    if(val >= 1 && val <= 10) app->framerate = (uint8_t)val;
-                } else if(!strcmp(key, "lmh_mode")) {
-                    if(val >= 0 && val < FM_LMH_COUNT) app->long_msg = (FMLongMsg)val;
-                } else if(!strcmp(key, "hb_idx")) {
-                    if(val >= 0 && val <= 2) app->hb_idx = (uint8_t)val;
-                } else if(!strcmp(key, "channels")) {
-                    if(val >= 1 && val <= FM_MAX_CHANNELS) app->num_ch = (uint8_t)val;
-                } else if(!strcmp(key, "timestamps")) {
-                    app->show_ts = (val != 0);
-                }
-            }
+        } else if((c == '\n' || c == '\0') && phase != PS_DONE) {
+            val[vi] = '\0';
+            if(ki > 0) dispatch(app, key, val);
+            ki = vi = 0;
+            phase   = PS_KEY;
+
+        } else if(phase == PS_KEY && ki < (uint8_t)(sizeof(key) - 1)) {
+            key[ki++] = c;
+
+        } else if(phase == PS_VAL && vi < (uint8_t)(sizeof(val) - 1)) {
+            val[vi++] = c;
         }
-        pos = eol + 1;
     }
 }

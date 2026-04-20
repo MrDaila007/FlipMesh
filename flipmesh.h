@@ -162,8 +162,8 @@ typedef struct {
 
 typedef struct {
     FMMessage buf[FM_MSG_HISTORY];
-    uint8_t   head;
-    uint8_t   count;
+    uint8_t   head;   /* index of the OLDEST stored message */
+    uint8_t   count;  /* number of valid messages (0..FM_MSG_HISTORY) */
 } FMHistory;
 
 /* ── Main application context ────────────────────────────────────────────── */
