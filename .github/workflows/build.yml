@@ -28,7 +28,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: flipmesh_uart-fap
-          path: ${{ steps.build-uart.outputs.fap-name }}
+          path: apps/uart/dist
           retention-days: 30
 
   build-bt:
@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: flipmesh_bt-fap
-          path: ${{ steps.build-bt.outputs.fap-name }}
+          path: apps/bt/dist
           retention-days: 30
 
   lint:
