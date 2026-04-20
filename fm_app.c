@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025 DanilaE
+
 #include "flipmesh.h"
 #include "fm_gui.h"
 #include "fm_uart.h"

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025 DanilaE
+
 #include "fm_roster.h"
 #include <string.h>
 #include <stdio.h>

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025 DanilaE
+
 #include "fm_gui.h"
 #include "fm_notify.h"
 #include "fm_uart.h"

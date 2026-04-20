@@ -1,0 +1,61 @@
+FlipMesh uses the following third-party components:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. nanopb — Protocol Buffers for Embedded Systems
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Source:  https://github.com/nanopb/nanopb
+Version: 0.4.9.1
+Files:   lib/nanopb/
+
+Copyright (c) 2011 Petteri Aimonen <jpa at nanopb.mail.kapsi.fi>
+
+This software is provided 'as-is', without any express or implied warranty.
+In no event will the authors be held liable for any damages arising from the
+use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it freely,
+subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software in a
+     product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+
+  3. This notice may not be removed or altered from any source distribution.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. Meshtastic Firmware — Protobuf definitions
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Source:  https://github.com/meshtastic/firmware
+Version: 2.7.22
+Files:   lib/meshtastic_api/meshtastic/*.pb.h
+         lib/meshtastic_api/meshtastic/*.pb.c
+
+Copyright (c) Meshtastic Project contributors
+
+Licensed under the GNU General Public License v3.0.
+Full license text: https://github.com/meshtastic/firmware/blob/master/LICENSE
+
+The .pb.h and .pb.c files in lib/meshtastic_api/ are auto-generated from
+Meshtastic's .proto definitions using nanopb and are distributed here under
+the same GPL v3 terms.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. Flipper Zero Firmware SDK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Source:  https://github.com/flipperdevices/flipperzero-firmware
+Files:   SDK headers used at build time via ufbt (not bundled in this repo)
+
+Copyright (c) Flipper Devices Inc. and contributors
+
+Licensed under the GNU General Public License v3.0.
+Full license text: https://github.com/flipperdevices/flipperzero-firmware/blob/dev/LICENSE

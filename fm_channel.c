@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025 DanilaE
+
 #include "fm_channel.h"
 #include "fm_history.h"
 

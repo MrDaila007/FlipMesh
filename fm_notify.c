@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025 DanilaE
+
 #include "fm_notify.h"
 #include <furi_hal_speaker.h>
 #include <notification/notification.h>
