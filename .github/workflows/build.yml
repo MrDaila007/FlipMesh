@@ -21,6 +21,8 @@ jobs:
         with:
           app-dir: apps/uart
           sdk-channel: release
+          # APPCHK false positives: nanopb Meshtastic descriptors, __aeabi_ldivmod.
+          ufbt-args: "-s STRICT_FAP_IMPORT_CHECK=no"
 
       - name: Upload UART FAP artifact
         uses: actions/upload-artifact@v4
@@ -43,6 +45,7 @@ jobs:
         with:
           app-dir: apps/bt
           sdk-channel: release
+          ufbt-args: "-s STRICT_FAP_IMPORT_CHECK=no"
 
       - name: Upload BT FAP artifact
         uses: actions/upload-artifact@v4
